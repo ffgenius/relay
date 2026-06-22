@@ -158,20 +158,16 @@ fn write_shim_file(path: &Path, name: &str, root: Option<&Path>) -> Result<()> {
         })?;
 
         #[cfg(not(windows))]
-        {
-            write!(
-                f,
-                "#!/bin/sh\n{MAGIC}\nexec \"{relay_exe}\"{root_arg} run {name} \"$@\"\n"
-            )
-        }
+        let res = write!(
+            f,
+            "#!/bin/sh\n{MAGIC}\nexec \"{relay_exe}\"{root_arg} run {name} \"$@\"\n"
+        );
         #[cfg(windows)]
-        {
-            write!(
-                f,
-                "@echo off\r\nREM relay-shim v1\r\n\"{relay_exe}\"{root_arg} run {name} %*\r\n"
-            )
-        }
-        .map_err(|source| RelayError::Io {
+        let res = write!(
+            f,
+            "@echo off\r\nREM relay-shim v1\r\n\"{relay_exe}\"{root_arg} run {name} %*\r\n"
+        );
+        res.map_err(|source| RelayError::Io {
             path: tmp.clone(),
             source,
         })?;
