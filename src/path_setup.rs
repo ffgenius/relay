@@ -139,13 +139,32 @@ mod platform {
             return InstallOutcome::AlreadyPresent;
         }
 
-        // Append. If the existing value doesn't end with ';', add one.
-        let separator = if current_value.is_empty() || current_value.ends_with(';') {
-            ""
+        // Prepend (not append). Two reasons:
+        //   1. cmd.exe truncates the final %PATH% to 2047 chars at process
+        //      creation time. If the user's PATH is already crowded, an
+        //      appended entry vanishes silently — exactly the bug we just
+        //      hit on real installs.
+        //   2. Relay's namespace (`v`, `g`, `n`, ...) should win against
+        //      legacy executables that happen to share a name. A `g.exe`
+        //      somewhere else on PATH should not beat `relay add g git`.
+        let new_value = if current_value.is_empty() {
+            bin_str.to_string()
         } else {
-            ";"
+            format!("{bin_str};{current_value}")
         };
-        let new_value = format!("{current_value}{separator}{bin_str}");
+
+        // Soft cap warning: total HKCU Path values much over 2KB risk
+        // truncation by the time they reach a cmd window (Windows reserves
+        // 2047 chars for the *combined* user+system PATH; user-only above
+        // ~1900 starts crowding it). We still write it, but flag it.
+        let length_warning = if new_value.len() > 1900 {
+            Some(format!(
+                "[warn] user PATH is {} chars long — Windows may truncate it",
+                new_value.len()
+            ))
+        } else {
+            None
+        };
 
         // Encode as UTF-16 LE (including null terminator) and write back
         // with the *same* registry type. If it was REG_EXPAND_SZ, writing
@@ -160,7 +179,67 @@ mod platform {
             ));
         }
 
+        // Broadcast WM_SETTINGCHANGE so explorer / running shells re-read
+        // the environment. Without this, the registry value is correct but
+        // new cmd windows inherit explorer's stale cached PATH until the
+        // user logs out — confusing, since `relay init` prints "added to
+        // PATH" but `n ls` still fails.
+        broadcast_environment_change();
+
+        if let Some(w) = length_warning {
+            println!("{w}");
+        }
+
         InstallOutcome::Installed
+    }
+
+    /// Send `WM_SETTINGCHANGE` to all top-level windows with `lParam`
+    /// pointing at the string "Environment". Explorer listens for this and
+    /// reloads its env block; any process spawned after this point inherits
+    /// the new PATH. Best-effort — if the broadcast fails the user just
+    /// needs to log out / log back in, which is what they would have had
+    /// to do anyway.
+    fn broadcast_environment_change() {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        // SAFETY: SendMessageTimeoutW is a system call with stable ABI;
+        // we pass a properly null-terminated UTF-16 buffer for lParam.
+        // The HWND_BROADCAST + SMTO_ABORTIFHUNG + 5s timeout combo is the
+        // documented pattern for "tell everyone, but don't wedge if a
+        // hung window doesn't reply".
+        #[link(name = "user32")]
+        extern "system" {
+            fn SendMessageTimeoutW(
+                hwnd: isize,
+                msg: u32,
+                wparam: usize,
+                lparam: *const u16,
+                fuflags: u32,
+                timeout: u32,
+                result: *mut usize,
+            ) -> isize;
+        }
+        const HWND_BROADCAST: isize = 0xFFFF;
+        const WM_SETTINGCHANGE: u32 = 0x001A;
+        const SMTO_ABORTIFHUNG: u32 = 0x0002;
+
+        let param: Vec<u16> = OsStr::new("Environment")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut result: usize = 0;
+        unsafe {
+            SendMessageTimeoutW(
+                HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                0,
+                param.as_ptr(),
+                SMTO_ABORTIFHUNG,
+                5_000,
+                &mut result,
+            );
+        }
     }
 
     /// Decode a UTF-16 LE byte slice (with or without trailing NUL) into a
