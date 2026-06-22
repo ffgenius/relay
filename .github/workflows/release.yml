@@ -46,12 +46,12 @@ jobs:
             cross: true
           - platform: darwin
             arch: x64
-            runner: macos-13         # intel
+            runner: macos-14         # cross-compile on apple-silicon (macos-13 retired)
             target: x86_64-apple-darwin
             exe: relay
           - platform: darwin
             arch: arm64
-            runner: macos-14         # apple silicon
+            runner: macos-14         # apple silicon, native
             target: aarch64-apple-darwin
             exe: relay
           - platform: win32
