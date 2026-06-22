@@ -5,3 +5,10 @@ Cargo.lock.bak
 .DS_Store
 .idea/
 .vscode/
+
+# npm-related — binaries are produced by CI, not committed.
+node_modules/
+npm/platforms/*/bin/
+npm/relay/bin/relay
+npm/relay/bin/relay.exe
+*.tgz

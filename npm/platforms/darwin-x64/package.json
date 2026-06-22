@@ -1,0 +1,16 @@
+{
+  "name": "@ffgenius/relay-darwin-x64",
+  "version": "0.1.0",
+  "description": "darwin-x64 binary for @ffgenius/relay",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ffgenius/relay.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin/"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@ffgenius/relay-linux-arm64",
+  "version": "0.1.0",
+  "description": "linux-arm64 binary for @ffgenius/relay",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ffgenius/relay.git"
+  },
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["bin/"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

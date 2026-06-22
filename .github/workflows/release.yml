@@ -1,0 +1,147 @@
+# Release workflow.
+#
+# Trigger:  push a tag matching `v*.*.*` (e.g. `v0.1.0`).
+#
+# Strategy:
+#   1. `build` — matrix-build the relay binary on native runners for each
+#      target triple. Each job uploads its binary as a GitHub Actions artifact
+#      named `relay-<platform>-<arch>`.
+#   2. `publish-npm` — depends on `build`. Downloads every artifact, drops
+#      each binary into the matching `npm/platforms/<plat>-<arch>/bin/`
+#      directory, then `npm publish`es all 6 platform packages followed by
+#      the wrapper.
+#
+# Required secrets:
+#   - NPM_TOKEN  — npm automation token with publish permission on the
+#                  `@ffgenius` scope.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write   # needed if we later attach binaries to a GH Release
+
+jobs:
+  build:
+    name: build ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            exe: relay
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            exe: relay
+            cross: true
+          - platform: darwin
+            arch: x64
+            runner: macos-13         # intel
+            target: x86_64-apple-darwin
+            exe: relay
+          - platform: darwin
+            arch: arm64
+            runner: macos-14         # apple silicon
+            target: aarch64-apple-darwin
+            exe: relay
+          - platform: win32
+            arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            exe: relay.exe
+          - platform: win32
+            arch: arm64
+            runner: windows-latest
+            target: aarch64-pc-windows-msvc
+            exe: relay.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: install cross (linux arm64)
+        if: matrix.cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: build (cross)
+        if: matrix.cross == true
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: build (native)
+        if: matrix.cross != true
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-${{ matrix.platform }}-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/${{ matrix.exe }}
+          if-no-files-found: error
+
+  publish-npm:
+    name: publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: stage binaries into platform packages
+        run: |
+          set -euo pipefail
+          for plat_arch in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            mkdir -p "npm/platforms/${plat_arch}/bin"
+            case "$plat_arch" in
+              win32-*) src_name="relay.exe"; dst_name="relay.exe" ;;
+              *)       src_name="relay";     dst_name="relay"     ;;
+            esac
+            cp "dist/relay-${plat_arch}/${src_name}" "npm/platforms/${plat_arch}/bin/${dst_name}"
+            # Unix binaries: ensure executable bit. (Lost on artifact upload otherwise.)
+            if [ "${plat_arch}" != "win32-x64" ] && [ "${plat_arch}" != "win32-arm64" ]; then
+              chmod +x "npm/platforms/${plat_arch}/bin/${dst_name}"
+            fi
+          done
+          # Verify nothing's missing.
+          find npm/platforms -name 'relay*' -ls
+
+      - name: publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for plat_arch in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            echo "::group::publish @ffgenius/relay-${plat_arch}"
+            npm publish ./npm/platforms/${plat_arch} --access public
+            echo "::endgroup::"
+          done
+
+      - name: publish wrapper
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Copy top-level README into the wrapper package so npmjs.com
+          # renders the same content as the GitHub README.
+          cp README.md npm/relay/README.md
+          npm publish ./npm/relay --access public

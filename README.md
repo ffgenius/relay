@@ -4,6 +4,18 @@ Secure cross-platform command router.
 
 See [`product.md`](./product.md) for the product spec and [`roadmap.md`](./roadmap.md) for milestones.
 
+## Install
+
+```bash
+npm install -g @ffgenius/relay
+# or: pnpm add -g @ffgenius/relay
+# or: yarn global add @ffgenius/relay
+```
+
+Supported platforms: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`,
+`win32-x64`, `win32-arm64`. npm installs the matching binary automatically via
+optional dependencies — only one platform's binary ends up on disk.
+
 ## Getting Started
 
 ```bash
@@ -51,7 +63,7 @@ cargo fmt --check
 ## Layout
 
 ```
-src/
+src/                  # Rust crate
 ├── main.rs           # entry point
 ├── lib.rs            # library root (re-exports)
 ├── cli.rs            # clap definitions and dispatch
@@ -63,7 +75,26 @@ src/
 └── doctor/           # `relay doctor` — environment validation
 
 tests/                # registry / shim / cli integration tests
+
+npm/                  # distribution
+├── relay/            # @ffgenius/relay — node wrapper + optionalDependencies
+└── platforms/        # @ffgenius/relay-<platform>-<arch> × 6 — binaries
+
+.github/workflows/
+└── release.yml       # triggered on `v*.*.*` tags; builds + publishes
 ```
+
+## Release
+
+```bash
+# Bump version in Cargo.toml and all npm/**/package.json, commit, then:
+git tag v0.1.0
+git push origin v0.1.0
+# → GitHub Actions builds 6 platform binaries and publishes all 7 npm packages.
+```
+
+Requires `NPM_TOKEN` (automation token with publish access on the `@ffgenius`
+scope) set as a GitHub Actions secret.
 
 ## Status
 
