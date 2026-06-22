@@ -88,8 +88,8 @@ npm/                  # distribution
 
 ```bash
 # Bump version in Cargo.toml and all npm/**/package.json, commit, then:
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.0.1
+git push origin v0.0.1
 # → GitHub Actions builds 6 platform binaries and publishes all 7 npm packages.
 ```
 

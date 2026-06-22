@@ -1,6 +1,6 @@
 # Release workflow.
 #
-# Trigger:  push a tag matching `v*.*.*` (e.g. `v0.1.0`).
+# Trigger:  push a tag matching `v*.*.*` (e.g. `v0.0.1`).
 #
 # Strategy:
 #   1. `build` — matrix-build the relay binary on native runners for each
