@@ -14,7 +14,6 @@
 use std::{
     fs,
     io::Write,
-    path::Path,
     process::{Command, Stdio},
 };
 
@@ -50,13 +49,40 @@ pub fn init(paths: &Paths) -> Result<()> {
 
     save_sync_state(paths, &SyncState {
         provider: "gist".into(),
-        gist_id,
+        gist_id: gist_id.clone(),
         synced_hash: hash,
     })?;
 
     println!("✔ Gist created: https://gist.github.com/{gist_id}");
     println!("  Use `relay sync push` to upload, `relay sync pull` to download.");
     println!("  On another machine, run `relay sync init` and paste this Gist ID.");
+    Ok(())
+}
+
+/// `relay sync link <gist_id>` — connect to an existing Gist without
+/// downloading or uploading. Use on a second machine after getting the
+/// Gist ID from `relay sync init` on the first machine.
+///
+/// After linking, run `relay sync pull` to download the aliases.
+pub fn link(paths: &Paths, gist_id: &str) -> Result<()> {
+    // Verify the Gist exists and has a config.yaml file.
+    let content = download_gist(gist_id)?;
+    // Parse to validate it's a config we understand.
+    let _config: Config = serde_yaml::from_str(&content).map_err(|e| {
+        RelayError::Other(anyhow::anyhow!(
+            "Gist {gist_id} doesn't contain a valid relay config: {e}"
+        ))
+    })?;
+
+    let hash = sha256_hex(&content);
+    save_sync_state(paths, &SyncState {
+        provider: "gist".into(),
+        gist_id: gist_id.to_string(),
+        synced_hash: hash,
+    })?;
+
+    println!("✔ Linked to Gist {gist_id}");
+    println!("  Run `relay sync pull` to download aliases.");
     Ok(())
 }
 
@@ -184,7 +210,15 @@ fn check_gh() -> Result<()> {
         .stderr(Stdio::null())
         .status();
     match which {
-        Err(_) | Ok(s) if !s.success() => {
+        Err(_) => {
+            return Err(RelayError::Other(anyhow::anyhow!(
+                "gh (GitHub CLI) not found on PATH.\n\
+                 Install it from https://cli.github.com/ then run:\n\n    \
+                 gh auth login\n\n\
+                 After that, try `relay sync init` again."
+            )));
+        }
+        Ok(s) if !s.success() => {
             return Err(RelayError::Other(anyhow::anyhow!(
                 "gh (GitHub CLI) not found on PATH.\n\
                  Install it from https://cli.github.com/ then run:\n\n    \
@@ -201,7 +235,15 @@ fn check_gh() -> Result<()> {
         .stderr(Stdio::null())
         .status();
     match auth {
-        Err(_) | Ok(s) if !s.success() => {
+        Err(_) => {
+            return Err(RelayError::Other(anyhow::anyhow!(
+                "gh is installed but not authenticated.\n\
+                 Run:\n\n    \
+                 gh auth login\n\n\
+                 Then try `relay sync init` again."
+            )));
+        }
+        Ok(s) if !s.success() => {
             return Err(RelayError::Other(anyhow::anyhow!(
                 "gh is installed but not authenticated.\n\
                  Run:\n\n    \

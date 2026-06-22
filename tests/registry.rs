@@ -214,3 +214,68 @@ fn config_yaml_roundtrip() {
     assert_eq!(loaded.commands.len(), 1);
     assert_eq!(loaded.commands["g"].program, "git");
 }
+
+#[test]
+fn export_and_import_roundtrip() {
+    let (tmp_a, paths_a) = tmp_paths();
+    let (_tmp_b, paths_b) = tmp_paths();
+    registry::init(&paths_a).unwrap();
+    registry::init(&paths_b).unwrap();
+
+    // Register two commands on machine A.
+    registry::add(&paths_a, "c", "cargo", &[]).unwrap();
+    registry::add(&paths_a, "cb", "cargo", &["build".to_string()]).unwrap();
+
+    // Export to a file in tmp_a.
+    let export_file = tmp_a.path().join("export.yaml");
+    registry::export(&paths_a, Some(&export_file)).unwrap();
+    assert!(export_file.exists());
+
+    // Import into machine B (empty).
+    registry::import(&paths_b, &export_file, false).unwrap();
+    let cfg_b = config::load(&paths_b).unwrap();
+    assert_eq!(cfg_b.commands.len(), 2);
+    assert_eq!(cfg_b.commands["c"].program, "cargo");
+    assert!(cfg_b.commands["cb"].args == vec!["build"]);
+}
+
+#[test]
+fn import_default_skips_existing() {
+    let (tmp_a, paths_a) = tmp_paths();
+    let (_tmp_b, paths_b) = tmp_paths();
+    registry::init(&paths_a).unwrap();
+    registry::init(&paths_b).unwrap();
+
+    // A has `c -> cargo`.
+    registry::add(&paths_a, "c", "cargo", &[]).unwrap();
+
+    // B already has its own `c -> cargo build` — should be kept on import.
+    registry::add(&paths_b, "c", "cargo", &["build".to_string()]).unwrap();
+
+    let export_file = tmp_a.path().join("export.yaml");
+    registry::export(&paths_a, Some(&export_file)).unwrap();
+    registry::import(&paths_b, &export_file, false).unwrap();
+
+    // B's `c` is still the exact form with args.
+    let cfg_b = config::load(&paths_b).unwrap();
+    assert_eq!(cfg_b.commands["c"].args, vec!["build"]);
+}
+
+#[test]
+fn import_overwrite_replaces_existing() {
+    let (tmp_a, paths_a) = tmp_paths();
+    let (_tmp_b, paths_b) = tmp_paths();
+    registry::init(&paths_a).unwrap();
+    registry::init(&paths_b).unwrap();
+
+    registry::add(&paths_a, "c", "cargo", &[]).unwrap();
+    registry::add(&paths_b, "c", "cargo", &["build".to_string()]).unwrap();
+
+    let export_file = tmp_a.path().join("export.yaml");
+    registry::export(&paths_a, Some(&export_file)).unwrap();
+    registry::import(&paths_b, &export_file, true).unwrap();
+
+    // B's `c` was overwritten with A's prefix form (no args).
+    let cfg_b = config::load(&paths_b).unwrap();
+    assert!(cfg_b.commands["c"].args.is_empty());
+}

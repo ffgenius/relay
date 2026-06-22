@@ -181,6 +181,72 @@ pub fn info(paths: &Paths, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// `relay export` — write the current config as YAML.
+///
+/// With `output = None`, prints to stdout. With `output = Some(path)`,
+/// writes to that file. The YAML format is the same as the on-disk
+/// `~/.relay/config.yaml` so `relay import` on another machine can
+/// re-ingest it directly.
+pub fn export(paths: &Paths, output: Option<&std::path::Path>) -> Result<()> {
+    let config = config::load(paths)?;
+    let yaml = serde_yaml::to_string(&config).map_err(|source| RelayError::ConfigParse {
+        path: paths.config_file(),
+        source,
+    })?;
+
+    match output {
+        None => {
+            print!("{yaml}");
+        }
+        Some(path) => {
+            fs::write(path, &yaml).map_err(|source| RelayError::Io {
+                path: path.to_path_buf(),
+                source,
+            })?;
+            println!("exported {} command(s) to {}", config.commands.len(), path.display());
+        }
+    }
+    Ok(())
+}
+
+/// `relay import <file>` — merge a YAML config from a file into the local
+/// config. With `overwrite = false`, existing aliases are kept on conflict;
+/// with `overwrite = true`, the imported version wins.
+pub fn import(paths: &Paths, file: &std::path::Path, overwrite: bool) -> Result<()> {
+    let bytes = fs::read(file).map_err(|source| RelayError::Io {
+        path: file.to_path_buf(),
+        source,
+    })?;
+    let incoming: Config =
+        serde_yaml::from_slice(&bytes).map_err(|source| RelayError::ConfigParse {
+            path: file.to_path_buf(),
+            source,
+        })?;
+
+    let mut current = config::load(paths)?;
+    let mut added = 0usize;
+    let mut skipped = 0usize;
+    let mut overwritten = 0usize;
+
+    for (name, cmd) in incoming.commands {
+        if current.commands.contains_key(&name) {
+            if overwrite {
+                current.commands.insert(name, cmd);
+                overwritten += 1;
+            } else {
+                skipped += 1;
+            }
+        } else {
+            current.commands.insert(name, cmd);
+            added += 1;
+        }
+    }
+
+    config::save(paths, &current)?;
+    println!("imported: {added} added, {overwritten} overwritten, {skipped} skipped");
+    Ok(())
+}
+
 fn validate_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(RelayError::InvalidCommandName(

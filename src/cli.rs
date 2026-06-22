@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use crate::{
     config::{self, Paths},
-    discover, doctor, registry, runner, shim, Result,
+    discover, doctor, registry, runner, shim, sync, Result,
 };
 
 #[derive(Debug, Parser)]
@@ -93,10 +93,43 @@ pub enum Command {
     },
 
     /// Print the current config to stdout (yaml).
-    Export,
+    Export {
+        /// Write to a file instead of stdout.
+        #[arg(short, long)]
+        output: Option<std::path::PathBuf>,
+    },
 
-    /// Read a config from stdin and merge it into the user's config.
-    Import,
+    /// Merge a config file into the user's config.
+    Import {
+        /// Path to the YAML config file to import.
+        file: std::path::PathBuf,
+        /// Overwrite existing aliases on conflict. Default is to keep local.
+        #[arg(long)]
+        overwrite: bool,
+    },
+
+    /// Sync config to a private GitHub Gist (requires `gh` CLI).
+    Sync {
+        #[command(subcommand)]
+        action: SyncAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SyncAction {
+    /// Create a new private Gist and link this machine to it.
+    Init,
+    /// Upload the local config to the linked Gist.
+    Push,
+    /// Download the Gist config and overwrite the local config.
+    Pull,
+    /// Show whether sync is configured and clean/dirty.
+    Status,
+    /// Link this machine to an existing Gist by ID.
+    Link {
+        /// The Gist ID (the hex string in the URL).
+        gist_id: String,
+    },
 }
 
 /// Entry point used by `main.rs` and by integration tests.
@@ -141,15 +174,28 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
             println!("shims regenerated");
         }
         Command::Run { name, args } => runner::run(&paths, name, args)?,
-        Command::Export => return Err(crate::RelayError::Unimplemented("relay export")),
-        Command::Import => return Err(crate::RelayError::Unimplemented("relay import")),
+        Command::Export { output } => registry::export(&paths, output.as_deref())?,
+        Command::Import { file, overwrite } => {
+            registry::import(&paths, file, *overwrite)?
+        }
+        Command::Sync { action } => match action {
+            SyncAction::Init => sync::init(&paths)?,
+            SyncAction::Push => sync::push(&paths)?,
+            SyncAction::Pull => sync::pull(&paths)?,
+            SyncAction::Status => sync::status(&paths)?,
+            SyncAction::Link { gist_id } => sync::link(&paths, gist_id)?,
+        },
     }
 
-    // Keep shims in sync after every mutation, but not for Run/Doctor/Export/Import.
-    // RebuildShims already calls sync, so skip it there too.
+    // Keep shims in sync after every mutation, but not for Run/Doctor/Export/Sync status.
+    // RebuildShims and sync::pull already call sync, so skip them there too.
     let should_sync = matches!(
         command,
-        Command::Init | Command::Add { .. } | Command::Remove { .. } | Command::Update { .. }
+        Command::Init
+            | Command::Add { .. }
+            | Command::Remove { .. }
+            | Command::Update { .. }
+            | Command::Import { .. }
     );
     if should_sync {
         let config = config::load(&paths)?;
