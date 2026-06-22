@@ -1,6 +1,6 @@
 {
   "name": "@ffgenius/relay-darwin-x64",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "darwin-x64 binary for @ffgenius/relay",
   "license": "MIT",
   "repository": {
