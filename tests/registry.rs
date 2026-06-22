@@ -106,6 +106,28 @@ fn add_blocklisted_program_fails() {
 }
 
 #[test]
+fn add_strips_exe_suffix() {
+    let (_tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+    registry::add(&paths, "c", "cargo.exe", &[]).unwrap();
+    let cfg = config::load(&paths).unwrap();
+    assert_eq!(cfg.commands["c"].program, "cargo", ".exe suffix stripped");
+}
+
+#[test]
+fn add_rejects_path_in_program() {
+    let (_tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+    for bad in &["./cargo", "/usr/bin/cargo", "foo\\bar.exe"] {
+        let err = registry::add(&paths, "x", bad, &[]).unwrap_err();
+        assert!(
+            matches!(err, RelayError::InvalidProgram(_, _)),
+            "expected InvalidProgram for {bad}, got {err:?}"
+        );
+    }
+}
+
+#[test]
 fn remove_existing() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();

@@ -78,7 +78,8 @@ fn is_default_root(paths: &Paths) -> bool {
 /// `relay add` — register a new command.
 pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<()> {
     validate_name(name)?;
-    validate_program(program)?;
+    // validate_program returns the normalized form (e.g. `.exe` stripped).
+    let program = validate_program(program)?;
 
     let mut config = config::load(paths)?;
     if config.commands.contains_key(name) {
@@ -94,7 +95,7 @@ pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<
         name.to_string(),
         Command {
             kind,
-            program: program.to_string(),
+            program: program.clone(),
             args: args.to_vec(),
         },
     );
@@ -121,13 +122,13 @@ pub fn remove(paths: &Paths, name: &str) -> Result<()> {
 
 /// `relay update` — replace an existing command's program/args.
 pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<()> {
-    validate_program(program)?;
+    let program = validate_program(program)?;
     let mut config = config::load(paths)?;
     let entry = config
         .commands
         .get_mut(name)
         .ok_or_else(|| RelayError::UnknownCommand(name.to_string()))?;
-    entry.program = program.to_string();
+    entry.program = program.clone();
     entry.args = args.to_vec();
     entry.kind = if args.is_empty() {
         CommandKind::Prefix
@@ -200,8 +201,27 @@ fn validate_name(name: &str) -> Result<()> {
 }
 
 /// Validates that the program is not on the forbidden list and exists on PATH.
+/// Also normalizes the name for cross-platform portability:
+///
+///   - Strips a trailing `.exe` suffix (Windows users sometimes type
+///     `cargo.exe`; the config should store just `cargo` so it works
+///     on Linux / macOS after a `relay sync pull`).
+///   - Rejects program names that contain path separators (`/` or `\`).
+///     Relay routes by command name, not by file path — registering
+///     `/usr/bin/cargo` or `./cmd` would be a cross-platform footgun.
+///
 /// Exposed for reuse by the discover module.
-pub(crate) fn validate_program(program: &str) -> Result<()> {
+pub(crate) fn validate_program(program: &str) -> Result<String> {
+    let program = program.strip_suffix(".exe").unwrap_or(program);
+
+    // Reject path separators — must be a bare command name on PATH.
+    if program.contains('/') || program.contains('\\') {
+        return Err(RelayError::InvalidProgram(
+            program.to_string(),
+            "use a bare command name (e.g. `cargo`), not a path",
+        ));
+    }
+
     if FORBIDDEN_PROGRAMS
         .iter()
         .any(|p| p.eq_ignore_ascii_case(program))
@@ -210,5 +230,5 @@ pub(crate) fn validate_program(program: &str) -> Result<()> {
     }
     // Principle: only register what actually exists. `which` consults PATH.
     which::which(program).map_err(|_| RelayError::ExecutableNotFound(program.to_string()))?;
-    Ok(())
+    Ok(program.to_string())
 }

@@ -28,6 +28,9 @@ pub enum RelayError {
     #[error("invalid command name `{0}`: {reason}", reason = .1)]
     InvalidCommandName(String, &'static str),
 
+    #[error("invalid program `{0}`: {reason}", reason = .1)]
+    InvalidProgram(String, &'static str),
+
     #[error("could not determine the user's home directory")]
     NoHomeDir,
 
