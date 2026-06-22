@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use crate::{
     config::{self, Paths},
-    doctor, registry, runner, shim, Result,
+    discover, doctor, registry, runner, shim, Result,
 };
 
 #[derive(Debug, Parser)]
@@ -62,6 +62,15 @@ pub enum Command {
 
     /// Show the registered details of one command.
     Info { name: String },
+
+    /// Group registered aliases by their target program.
+    ///
+    /// Without arguments, lists every program along with its aliases.
+    /// With a program name, shows only that program's aliases.
+    Discover {
+        /// Filter by target program (e.g. `vite`, `git`).
+        program: Option<String>,
+    },
 
     /// Validate the environment, config, and shim state.
     Doctor {
@@ -124,6 +133,7 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         } => registry::update(&paths, name, program, args)?,
         Command::List => registry::list(&paths)?,
         Command::Info { name } => registry::info(&paths, name)?,
+        Command::Discover { program } => discover::run(&paths, program.as_deref())?,
         Command::Doctor { fix } => doctor::run(&paths, *fix)?,
         Command::RebuildShims => {
             let config = config::load(&paths)?;

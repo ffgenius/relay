@@ -199,7 +199,9 @@ fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_program(program: &str) -> Result<()> {
+/// Validates that the program is not on the forbidden list and exists on PATH.
+/// Exposed for reuse by the discover module.
+pub(crate) fn validate_program(program: &str) -> Result<()> {
     if FORBIDDEN_PROGRAMS
         .iter()
         .any(|p| p.eq_ignore_ascii_case(program))

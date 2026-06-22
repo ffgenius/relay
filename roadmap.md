@@ -31,28 +31,25 @@ v build
 
 ---
 
-## v0.2 Discover
+## v0.2 Discover ✓
 
-自动发现命令。
-
-```bash
-relay discover vite
-```
-
-分析：
+按目标程序聚合查询已注册的命令简写。
 
 ```bash
-vite --help
+relay discover            # 列出所有 program → aliases
+relay discover vite       # 只列 vite 的别名
 ```
 
-生成：
+输出示例：
 
-```yaml
-v:
-  program: vite
+```text
+vite (3 aliases):
+  v   → vite             [Prefix]
+  vd  → vite dev         [Exact]
+  vb  → vite build       [Exact]
 ```
 
-支持自动补全。
+补全留到后续版本。
 
 ---
 

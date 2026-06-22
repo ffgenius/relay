@@ -6,6 +6,7 @@
 
 pub mod cli;
 pub mod config;
+pub mod discover;
 pub mod doctor;
 pub mod error;
 pub mod path_setup;
