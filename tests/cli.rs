@@ -1,5 +1,5 @@
 //! Smoke-level integration tests via `assert_cmd`. These exercise argv
-//! parsing and the cli surface; they do *not* mutate the real `~/.relay`.
+//! parsing and the cli surface.
 
 use assert_cmd::Command;
 use predicates::str::contains;
@@ -19,8 +19,6 @@ fn prints_help() {
 
 #[test]
 fn list_subcommand_is_known() {
-    // We don't assert success here — `list` will try to load the real config
-    // directory. We only assert that clap accepted the subcommand.
     relay().args(["list", "--help"]).assert().success();
 }
 
@@ -30,4 +28,16 @@ fn rejects_unknown_subcommand() {
         .arg("nope-this-is-not-a-subcommand")
         .assert()
         .failure();
+}
+
+#[test]
+fn doctor_subcommand_is_known() {
+    // `doctor` always tries to read the real config; we only test clap
+    // recognised it (don't care about exit code).
+    relay().args(["doctor", "--help"]).assert().success();
+}
+
+#[test]
+fn rebuild_shims_subcommand_is_known() {
+    relay().args(["rebuild-shims", "--help"]).assert().success();
 }

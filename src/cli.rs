@@ -1,10 +1,12 @@
 //! CLI surface. clap parses argv into a [`Cli`], and [`run`] dispatches each
-//! subcommand to its module. Subcommands that don't have a real implementation
-//! yet return [`RelayError::Unimplemented`] so the surface compiles end-to-end.
+//! subcommand to its module.
 
 use clap::{Parser, Subcommand};
 
-use crate::{doctor, registry, runner, shim, RelayError, Result};
+use crate::{
+    config::{self, Paths},
+    doctor, registry, runner, shim, Result,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -14,6 +16,11 @@ use crate::{doctor, registry, runner, shim, RelayError, Result};
     long_about = None,
 )]
 pub struct Cli {
+    /// Override the relay root directory. Defaults to `~/.relay`.
+    /// Mainly useful for tests and for trying relay without touching $HOME.
+    #[arg(long, global = true, env = "RELAY_ROOT")]
+    pub root: Option<std::path::PathBuf>,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -33,20 +40,18 @@ pub enum Command {
         /// The target program (e.g. `vite`).
         program: String,
         /// Optional fixed arguments — supplying any makes this an `exact` command.
-        #[arg(trailing_var_arg = true)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Remove a registered command.
-    Remove {
-        name: String,
-    },
+    Remove { name: String },
 
     /// Replace the program/args of an existing command.
     Update {
         name: String,
         program: String,
-        #[arg(trailing_var_arg = true)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
@@ -54,15 +59,22 @@ pub enum Command {
     List,
 
     /// Show the registered details of one command.
-    Info {
-        name: String,
-    },
+    Info { name: String },
 
     /// Validate the environment, config, and shim state.
-    Doctor,
+    Doctor {
+        /// Automatically fix shim inconsistencies (re-generate missing shims,
+        /// remove orphaned ones).
+        #[arg(long)]
+        fix: bool,
+    },
+
+    /// Regenerate all shims from the current config. Shims are normally kept
+    /// in sync automatically — this is an explicit bulk-reset command.
+    RebuildShims,
 
     /// Execute a registered command. Invoked by the generated shims.
-    #[command(hide = true)]
+    #[command(hide = true, disable_help_flag = true, disable_version_flag = true)]
     Run {
         name: String,
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -79,27 +91,58 @@ pub enum Command {
 /// Entry point used by `main.rs` and by integration tests.
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
-    dispatch(cli.command)
+    dispatch_with_root(cli.command, cli.root)
 }
 
 /// Dispatch a parsed [`Command`]. Split from [`run`] so tests can drive it
 /// without re-parsing argv.
 pub fn dispatch(command: Command) -> Result<()> {
-    match command {
-        Command::Init => registry::init(),
-        Command::Add { name, program, args } => registry::add(&name, &program, &args),
-        Command::Remove { name } => registry::remove(&name),
-        Command::Update { name, program, args } => registry::update(&name, &program, &args),
-        Command::List => registry::list(),
-        Command::Info { name } => registry::info(&name),
-        Command::Doctor => doctor::run(),
-        Command::Run { name, args } => runner::run(&name, &args),
-        Command::Export => Err(RelayError::Unimplemented("relay export")),
-        Command::Import => Err(RelayError::Unimplemented("relay import")),
+    dispatch_with_root(command, None)
+}
+
+fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Result<()> {
+    // Resolve paths once so modules don't call `Paths::discover()` themselves.
+    let paths = match root {
+        Some(r) => Paths::at(r),
+        None => Paths::discover()?,
+    };
+
+    match &command {
+        Command::Init => registry::init(&paths)?,
+        Command::Add {
+            name,
+            program,
+            args,
+        } => registry::add(&paths, name, program, args)?,
+        Command::Remove { name } => registry::remove(&paths, name)?,
+        Command::Update {
+            name,
+            program,
+            args,
+        } => registry::update(&paths, name, program, args)?,
+        Command::List => registry::list(&paths)?,
+        Command::Info { name } => registry::info(&paths, name)?,
+        Command::Doctor { fix } => doctor::run(&paths, *fix)?,
+        Command::RebuildShims => {
+            let config = config::load(&paths)?;
+            shim::sync(&paths, &config)?;
+            println!("shims regenerated");
+        }
+        Command::Run { name, args } => runner::run(&paths, name, args)?,
+        Command::Export => return Err(crate::RelayError::Unimplemented("relay export")),
+        Command::Import => return Err(crate::RelayError::Unimplemented("relay import")),
     }
-    .and_then(|_| {
-        // Keep the shim-regeneration hook explicit so it's easy to find later.
-        let _ = shim::sync_marker();
-        Ok(())
-    })
+
+    // Keep shims in sync after every mutation, but not for Run/Doctor/Export/Import.
+    // RebuildShims already calls sync, so skip it there too.
+    let should_sync = matches!(
+        command,
+        Command::Init | Command::Add { .. } | Command::Remove { .. } | Command::Update { .. }
+    );
+    if should_sync {
+        let config = config::load(&paths)?;
+        shim::sync(&paths, &config)?;
+    }
+
+    Ok(())
 }

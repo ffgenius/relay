@@ -42,9 +42,6 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
         path: path.clone(),
         source,
     })?;
-    fs::write(&path, yaml).map_err(|source| RelayError::Io {
-        path,
-        source,
-    })?;
+    fs::write(&path, yaml).map_err(|source| RelayError::Io { path, source })?;
     Ok(())
 }

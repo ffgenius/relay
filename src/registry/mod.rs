@@ -1,8 +1,8 @@
 //! Command registry — the user-facing CRUD on `~/.relay/config.yaml`.
 //!
-//! All public functions in this module are subcommand handlers wired up from
-//! [`crate::cli`]. They keep their own paths-and-config dance simple: load,
-//! mutate, save.
+//! Handler functions take `&Paths` so tests can inject a `TempDir` instead of
+//! mutating the user's real `~/.relay`. Shim regeneration is done centrally
+//! from `cli::dispatch` after a successful mutation, not here.
 
 use std::fs;
 
@@ -15,32 +15,26 @@ use crate::{
 /// shell would defeat Principle 1 (Relay 不执行 Shell).
 const FORBIDDEN_PROGRAMS: &[&str] = &["sh", "bash", "zsh", "cmd", "powershell", "pwsh"];
 
-/// `relay init` — create `~/.relay` and `~/.relay/bin`, write an empty config
-/// if one does not exist.
-pub fn init() -> Result<()> {
-    let paths = Paths::discover()?;
+/// `relay init` — ensure `~/.relay` and an empty config exist. The shim bin
+/// directory is created by the shim module's sync step that runs right after.
+pub fn init(paths: &Paths) -> Result<()> {
     fs::create_dir_all(paths.root()).map_err(|source| RelayError::Io {
         path: paths.root().to_path_buf(),
         source,
     })?;
-    fs::create_dir_all(paths.bin_dir()).map_err(|source| RelayError::Io {
-        path: paths.bin_dir(),
-        source,
-    })?;
     if !paths.config_file().exists() {
-        config::save(&paths, &Config::default())?;
+        config::save(paths, &Config::default())?;
     }
     println!("relay initialised at {}", paths.root().display());
     Ok(())
 }
 
 /// `relay add` — register a new command.
-pub fn add(name: &str, program: &str, args: &[String]) -> Result<()> {
+pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<()> {
     validate_name(name)?;
     validate_program(program)?;
 
-    let paths = Paths::discover()?;
-    let mut config = config::load(&paths)?;
+    let mut config = config::load(paths)?;
     if config.commands.contains_key(name) {
         return Err(RelayError::CommandExists(name.to_string()));
     }
@@ -58,28 +52,26 @@ pub fn add(name: &str, program: &str, args: &[String]) -> Result<()> {
             args: args.to_vec(),
         },
     );
-    config::save(&paths, &config)?;
+    config::save(paths, &config)?;
     println!("added {name} -> {program}");
     Ok(())
 }
 
 /// `relay remove` — delete a registered command.
-pub fn remove(name: &str) -> Result<()> {
-    let paths = Paths::discover()?;
-    let mut config = config::load(&paths)?;
+pub fn remove(paths: &Paths, name: &str) -> Result<()> {
+    let mut config = config::load(paths)?;
     if config.commands.remove(name).is_none() {
         return Err(RelayError::UnknownCommand(name.to_string()));
     }
-    config::save(&paths, &config)?;
+    config::save(paths, &config)?;
     println!("removed {name}");
     Ok(())
 }
 
 /// `relay update` — replace an existing command's program/args.
-pub fn update(name: &str, program: &str, args: &[String]) -> Result<()> {
+pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<()> {
     validate_program(program)?;
-    let paths = Paths::discover()?;
-    let mut config = config::load(&paths)?;
+    let mut config = config::load(paths)?;
     let entry = config
         .commands
         .get_mut(name)
@@ -91,15 +83,14 @@ pub fn update(name: &str, program: &str, args: &[String]) -> Result<()> {
     } else {
         CommandKind::Exact
     };
-    config::save(&paths, &config)?;
+    config::save(paths, &config)?;
     println!("updated {name}");
     Ok(())
 }
 
 /// `relay list` — print all registered commands.
-pub fn list() -> Result<()> {
-    let paths = Paths::discover()?;
-    let config = config::load(&paths)?;
+pub fn list(paths: &Paths) -> Result<()> {
+    let config = config::load(paths)?;
     if config.commands.is_empty() {
         println!("(no commands registered — try `relay add v vite`)");
         return Ok(());
@@ -110,16 +101,18 @@ pub fn list() -> Result<()> {
         } else {
             format!(" {}", cmd.args.join(" "))
         };
-        println!("{name:<12} [{kind:?}] {program}{suffix}",
-            kind = cmd.kind, program = cmd.program);
+        println!(
+            "{name:<12} [{kind:?}] {program}{suffix}",
+            kind = cmd.kind,
+            program = cmd.program
+        );
     }
     Ok(())
 }
 
 /// `relay info <name>` — render the full details of one command.
-pub fn info(name: &str) -> Result<()> {
-    let paths = Paths::discover()?;
-    let config = config::load(&paths)?;
+pub fn info(paths: &Paths, name: &str) -> Result<()> {
+    let config = config::load(paths)?;
     let cmd = config
         .commands
         .get(name)
@@ -133,9 +126,15 @@ pub fn info(name: &str) -> Result<()> {
 
 fn validate_name(name: &str) -> Result<()> {
     if name.is_empty() {
-        return Err(RelayError::InvalidCommandName(name.to_string(), "name is empty"));
+        return Err(RelayError::InvalidCommandName(
+            name.to_string(),
+            "name is empty",
+        ));
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(RelayError::InvalidCommandName(
             name.to_string(),
             "only ASCII letters, digits, '-' and '_' are allowed",
@@ -145,7 +144,10 @@ fn validate_name(name: &str) -> Result<()> {
 }
 
 fn validate_program(program: &str) -> Result<()> {
-    if FORBIDDEN_PROGRAMS.iter().any(|p| p.eq_ignore_ascii_case(program)) {
+    if FORBIDDEN_PROGRAMS
+        .iter()
+        .any(|p| p.eq_ignore_ascii_case(program))
+    {
         return Err(RelayError::ForbiddenProgram(program.to_string()));
     }
     // Principle: only register what actually exists. `which` consults PATH.

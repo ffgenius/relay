@@ -4,9 +4,6 @@
 //!   * invoke any shell,
 //!   * evaluate strings,
 //!   * accept a program that wasn't registered.
-//!
-//! It MAY:
-//!   * `std::process::Command::new(program).args(...).spawn()`.
 
 use std::process::Command as ProcCommand;
 
@@ -18,12 +15,10 @@ use crate::{
 /// Execute the registered command `name`, forwarding `extra_args` to it.
 ///
 /// For [`CommandKind::Prefix`] commands, `extra_args` is appended after the
-/// stored `args` (empty by default). For [`CommandKind::Exact`] commands the
-/// stored args are used verbatim and any `extra_args` are rejected — that's
-/// what "exact" means.
-pub fn run(name: &str, extra_args: &[String]) -> Result<()> {
-    let paths = Paths::discover()?;
-    let config = config::load(&paths)?;
+/// stored `args`. For [`CommandKind::Exact`] commands the stored args are
+/// used verbatim and any `extra_args` are rejected — that's what "exact" means.
+pub fn run(paths: &Paths, name: &str, extra_args: &[String]) -> Result<()> {
+    let config = config::load(paths)?;
     let cmd = config
         .commands
         .get(name)
@@ -56,8 +51,8 @@ pub fn run(name: &str, extra_args: &[String]) -> Result<()> {
         })?;
 
     // Forward the child's exit code via process::exit so shims behave
-    // transparently.  `ok()` is fine — `code()` returns None only on
-    // signal-terminated unix processes; treat that as failure.
+    // transparently. `code()` returns None only on signal-terminated unix
+    // processes; treat that as failure.
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
     }
