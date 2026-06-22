@@ -45,6 +45,7 @@ pub enum Command {
     },
 
     /// Remove a registered command.
+    #[command(visible_aliases = ["rm"])]
     Remove { name: String },
 
     /// Replace the program/args of an existing command.
@@ -56,6 +57,7 @@ pub enum Command {
     },
 
     /// List all registered commands.
+    #[command(visible_aliases = ["ls"])]
     List,
 
     /// Show the registered details of one command.
