@@ -99,7 +99,12 @@ pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<
         },
     );
     config::save(paths, &config)?;
-    println!("added {name} -> {program}");
+    let suffix = if args.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", args.join(" "))
+    };
+    println!("added {name} -> {program}{suffix}");
     Ok(())
 }
 
@@ -130,7 +135,12 @@ pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Resu
         CommandKind::Exact
     };
     config::save(paths, &config)?;
-    println!("updated {name}");
+    let suffix = if args.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", args.join(" "))
+    };
+    println!("updated {name} -> {program}{suffix}");
     Ok(())
 }
 
