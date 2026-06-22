@@ -260,7 +260,7 @@ mod platform {
         };
 
         // Determine the rc file path and the line to add.
-        let (rc_path, export_line) = match shell_path(shell) {
+        let (rc_path, export_line) = match shell_path(&shell) {
             Some(pair) => pair,
             None => {
                 return InstallOutcome::Unsupported(format!(
@@ -331,8 +331,8 @@ mod platform {
 
     /// Given a full path like `/bin/bash` or `/usr/bin/zsh`, return the
     /// rc file path and the export line appropriate for that shell.
-    fn shell_path(shell: String) -> Option<(PathBuf, &'static str)> {
-        let name = std::path::Path::new(&shell)
+    fn shell_path(shell: &str) -> Option<(PathBuf, &'static str)> {
+        let name = std::path::Path::new(shell)
             .file_name()
             .and_then(|n| n.to_str())?;
 
