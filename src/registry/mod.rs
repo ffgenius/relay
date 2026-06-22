@@ -8,6 +8,7 @@ use std::fs;
 
 use crate::{
     config::{self, Command, CommandKind, Config, Paths},
+    path_setup::{self, InstallOutcome},
     RelayError, Result,
 };
 
@@ -17,6 +18,14 @@ const FORBIDDEN_PROGRAMS: &[&str] = &["sh", "bash", "zsh", "cmd", "powershell", 
 
 /// `relay init` — ensure `~/.relay` and an empty config exist. The shim bin
 /// directory is created by the shim module's sync step that runs right after.
+///
+/// As a convenience for first-run UX, this also tries to put
+/// `~/.relay/bin` on the user's persistent PATH. Failures here are not
+/// fatal — they degrade to a printed hint.
+///
+/// The PATH side-effect is skipped when running against a non-default root
+/// (i.e. `--root` or `RELAY_ROOT` is set) so that integration tests and
+/// `--root <tmpdir>` smoke runs don't pollute the user's real environment.
 pub fn init(paths: &Paths) -> Result<()> {
     fs::create_dir_all(paths.root()).map_err(|source| RelayError::Io {
         path: paths.root().to_path_buf(),
@@ -26,7 +35,44 @@ pub fn init(paths: &Paths) -> Result<()> {
         config::save(paths, &Config::default())?;
     }
     println!("relay initialised at {}", paths.root().display());
+
+    // Only touch the user's persistent PATH for the canonical relay root.
+    // Sandboxed runs (tests / `--root`) get the shim dir created but skip
+    // the system-wide PATH edit.
+    if !is_default_root(paths) {
+        return Ok(());
+    }
+
+    // Best-effort PATH install — never bubbles up to the caller. New shells
+    // then pick `n`, `v`, etc. up automatically.
+    match path_setup::install(paths) {
+        InstallOutcome::AlreadyPresent => {
+            println!("[ok ]  shim dir already on PATH");
+        }
+        InstallOutcome::Installed => {
+            println!(
+                "[ok ]  shim dir added to PATH — open a new terminal for it to take effect"
+            );
+        }
+        InstallOutcome::Unsupported(reason) | InstallOutcome::Failed(reason) => {
+            println!("[warn] could not auto-update PATH: {reason}");
+            println!(
+                "       add `{}` to your PATH manually",
+                paths.bin_dir().display()
+            );
+        }
+    }
     Ok(())
+}
+
+/// True iff `paths` resolves to the platform default `~/.relay` — used to
+/// suppress destructive system-level side effects when running under a
+/// `--root <tmpdir>` override.
+fn is_default_root(paths: &Paths) -> bool {
+    let Ok(default) = config::Paths::discover() else {
+        return false;
+    };
+    paths.root() == default.root()
 }
 
 /// `relay add` — register a new command.

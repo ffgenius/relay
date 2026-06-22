@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use crate::{
     config::{self, Paths},
+    path_setup::{self, InstallOutcome},
     shim, Result,
 };
 
@@ -44,7 +45,8 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
 
     // ── 1. Relay PATH ──────────────────────────────────────────────────
     let bin_dir = paths.bin_dir();
-    if path_contains(&bin_dir) {
+    let path_ok = path_contains(&bin_dir);
+    if path_ok {
         println!("[ok ]  shim dir is on PATH");
     } else {
         println!(
@@ -98,15 +100,58 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
         return Ok(());
     }
 
-    if fix && !shim_issues.is_empty() {
-        println!("fixing {} shim issue(s)...", shim_issues.len());
-        shim::sync(paths, &config)?;
+    if fix {
+        if !shim_issues.is_empty() {
+            println!("fixing {} shim issue(s)...", shim_issues.len());
+            shim::sync(paths, &config)?;
+        }
+        if !path_ok {
+            // Skip the system-level PATH edit when running against a
+            // sandboxed root (tests / `--root <tmpdir>`) — only the real
+            // `~/.relay` should ever touch the user's environment.
+            if !is_default_root(paths) {
+                println!(
+                    "[warn] PATH not modified — running with a non-default root.\n       add `{}` to your PATH manually",
+                    bin_dir.display()
+                );
+            } else {
+                println!("fixing PATH...");
+                match path_setup::install(paths) {
+                    InstallOutcome::AlreadyPresent => {
+                        println!("[ok ]  shim dir already on PATH");
+                    }
+                    InstallOutcome::Installed => {
+                        println!(
+                            "[ok ]  shim dir added to PATH — open a new terminal for it to take effect"
+                        );
+                    }
+                    InstallOutcome::Unsupported(reason)
+                    | InstallOutcome::Failed(reason) => {
+                        println!("[warn] could not auto-update PATH: {reason}");
+                        println!(
+                            "       add `{}` to your PATH manually",
+                            bin_dir.display()
+                        );
+                    }
+                }
+            }
+        }
         println!("done. re-run `relay doctor` to verify.");
     } else {
-        println!("{issues} issue(s) found. re-run with --fix to repair shims.");
+        println!("{issues} issue(s) found. re-run with --fix to repair.");
     }
 
     Ok(())
+}
+
+/// True iff `paths` resolves to the platform default `~/.relay`.
+/// Used to suppress system-level PATH edits under a `--root <tmpdir>`
+/// override so tests cannot pollute the user's HKCU / shell profile.
+fn is_default_root(paths: &Paths) -> bool {
+    let Ok(default) = config::Paths::discover() else {
+        return false;
+    };
+    paths.root() == default.root()
 }
 
 /// Is the given directory present in $PATH? Comparison is by canonicalised

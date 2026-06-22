@@ -8,6 +8,7 @@ pub mod cli;
 pub mod config;
 pub mod doctor;
 pub mod error;
+pub mod path_setup;
 pub mod registry;
 pub mod runner;
 pub mod shim;
