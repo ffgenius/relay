@@ -1,0 +1,29 @@
+# Dependabot — weekly automated dependency updates.
+#
+# Three ecosystems:
+#   1. cargo     — Rust crate dependencies.
+#   2. github-actions — CI workflow actions (checkout, rust-cache, …).
+#   3. npm       — npm wrapper & platform packages under npm/.
+
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /npm/relay
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

@@ -1,0 +1,65 @@
+# CI workflow.
+#
+# Trigger:  push to master, any pull request.
+#
+# Jobs:
+#   1. `lint`   — cargo fmt + cargo clippy (ubuntu, fastest runner).
+#   2. `test`   — cargo test on ubuntu / macos / windows, matrix.
+#      caches Rust toolchain + target dir between runs.
+
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: lint (fmt + clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    name: test ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: darwin
+            runner: macos-14
+          - platform: win32
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo test
+        run: cargo test
