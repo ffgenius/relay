@@ -54,15 +54,16 @@ pub fn init(paths: &Paths) -> Result<()> {
     };
     ui::spinner_finish(&pb, format!("Gist created (id: {gist_id})"));
 
-    save_sync_state(paths, &SyncState {
-        provider: "gist".into(),
-        gist_id: gist_id.clone(),
-        synced_hash: hash,
-    })?;
+    save_sync_state(
+        paths,
+        &SyncState {
+            provider: "gist".into(),
+            gist_id: gist_id.clone(),
+            synced_hash: hash,
+        },
+    )?;
 
-    ui::line(format!(
-        "  url: https://gist.github.com/{gist_id}"
-    ));
+    ui::line(format!("  url: https://gist.github.com/{gist_id}"));
     ui::note("`relay sync push` uploads, `relay sync pull` downloads.");
     ui::note(format!(
         "on another machine, run `relay sync link {gist_id}`."
@@ -95,11 +96,14 @@ pub fn link(paths: &Paths, gist_id: &str) -> Result<()> {
     ui::spinner_finish(&pb, format!("Linked to Gist {gist_id}"));
 
     let hash = sha256_hex(&content);
-    save_sync_state(paths, &SyncState {
-        provider: "gist".into(),
-        gist_id: gist_id.to_string(),
-        synced_hash: hash,
-    })?;
+    save_sync_state(
+        paths,
+        &SyncState {
+            provider: "gist".into(),
+            gist_id: gist_id.to_string(),
+            synced_hash: hash,
+        },
+    )?;
 
     ui::note("run `relay sync pull` to download aliases.");
     Ok(())
@@ -153,15 +157,15 @@ pub fn push(paths: &Paths) -> Result<()> {
         pb.finish_and_clear();
         return Err(e);
     }
-    ui::spinner_finish(
-        &pb,
-        format!("Pushed ({} commands)", config.commands.len()),
-    );
+    ui::spinner_finish(&pb, format!("Pushed ({} commands)", config.commands.len()));
 
-    save_sync_state(paths, &SyncState {
-        synced_hash: hash,
-        ..state
-    })?;
+    save_sync_state(
+        paths,
+        &SyncState {
+            synced_hash: hash,
+            ..state
+        },
+    )?;
 
     Ok(())
 }
@@ -209,10 +213,13 @@ pub fn pull(paths: &Paths) -> Result<()> {
     config::save(paths, &remote_config)?;
     let new_hash = sha256_hex(&remote_content);
 
-    save_sync_state(paths, &SyncState {
-        synced_hash: new_hash,
-        ..state
-    })?;
+    save_sync_state(
+        paths,
+        &SyncState {
+            synced_hash: new_hash,
+            ..state
+        },
+    )?;
 
     // Re-sync shims.
     crate::shim::sync(paths, &remote_config)?;
@@ -367,7 +374,10 @@ fn update_gist(gist_id: &str, content: &str) -> Result<()> {
         }
     });
 
-    run_gh_api(&[&format!("/gists/{gist_id}"), "--input", "-"], Some(&body.to_string()))?;
+    run_gh_api(
+        &[&format!("/gists/{gist_id}"), "--input", "-"],
+        Some(&body.to_string()),
+    )?;
     Ok(())
 }
 
@@ -399,17 +409,17 @@ fn run_gh_api(args: &[&str], stdin_body: Option<&str>) -> Result<String> {
     if stdin_body.is_some() {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
-        let mut child = cmd.spawn().map_err(|e| {
-            RelayError::Other(anyhow::anyhow!("failed to spawn gh: {e}"))
-        })?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| RelayError::Other(anyhow::anyhow!("failed to spawn gh: {e}")))?;
         if let Some(body) = stdin_body {
             if let Some(mut stdin) = child.stdin.take() {
                 stdin.write_all(body.as_bytes()).ok();
             }
         }
-        let output = child.wait_with_output().map_err(|e| {
-            RelayError::Other(anyhow::anyhow!("gh api failed: {e}"))
-        })?;
+        let output = child
+            .wait_with_output()
+            .map_err(|e| RelayError::Other(anyhow::anyhow!("gh api failed: {e}")))?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !output.status.success() {
             return Err(RelayError::Other(anyhow::anyhow!(
@@ -419,9 +429,9 @@ fn run_gh_api(args: &[&str], stdin_body: Option<&str>) -> Result<String> {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
         cmd.stdout(Stdio::piped());
-        let output = cmd.output().map_err(|e| {
-            RelayError::Other(anyhow::anyhow!("failed to spawn gh: {e}"))
-        })?;
+        let output = cmd
+            .output()
+            .map_err(|e| RelayError::Other(anyhow::anyhow!("failed to spawn gh: {e}")))?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !output.status.success() {
             return Err(RelayError::Other(anyhow::anyhow!(
@@ -451,9 +461,8 @@ fn load_sync_state(paths: &Paths) -> Result<SyncState> {
         path: path.clone(),
         source,
     })?;
-    let state: SyncState = serde_yaml::from_slice(&bytes).map_err(|e| {
-        RelayError::Other(anyhow::anyhow!("invalid sync-state.yaml: {e}"))
-    })?;
+    let state: SyncState = serde_yaml::from_slice(&bytes)
+        .map_err(|e| RelayError::Other(anyhow::anyhow!("invalid sync-state.yaml: {e}")))?;
     Ok(state)
 }
 
