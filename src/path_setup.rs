@@ -61,7 +61,9 @@ fn install_dir(bin_dir: &Path) -> InstallOutcome {
 
     #[cfg(not(any(windows, unix)))]
     {
-        InstallOutcome::Unsupported("unsupported platform — add the shim dir to your PATH manually".into())
+        InstallOutcome::Unsupported(
+            "unsupported platform — add the shim dir to your PATH manually".into(),
+        )
     }
 }
 
@@ -100,9 +102,7 @@ mod platform {
         let bin_str = match bin_dir.to_str() {
             Some(s) => s,
             None => {
-                return InstallOutcome::Failed(
-                    "bin directory path is not valid UTF-8".into(),
-                );
+                return InstallOutcome::Failed("bin directory path is not valid UTF-8".into());
             }
         };
 
@@ -111,9 +111,7 @@ mod platform {
         {
             Ok(k) => k,
             Err(e) => {
-                return InstallOutcome::Failed(format!(
-                    "could not open HKCU\\{ENV_KEY}: {e}"
-                ));
+                return InstallOutcome::Failed(format!("could not open HKCU\\{ENV_KEY}: {e}"));
             }
         };
 
@@ -170,10 +168,13 @@ mod platform {
         // with the *same* registry type. If it was REG_EXPAND_SZ, writing
         // as REG_SZ would break %VAR%-style entries in other segments.
         let bytes = to_utf16_le(&new_value);
-        if let Err(e) = hkcu.set_raw_value("Path", &winreg::RegValue {
-            bytes,
-            vtype: reg_type,
-        }) {
+        if let Err(e) = hkcu.set_raw_value(
+            "Path",
+            &winreg::RegValue {
+                bytes,
+                vtype: reg_type,
+            },
+        ) {
             return InstallOutcome::Failed(format!(
                 "could not write to HKCU\\{ENV_KEY}\\Path: {e}"
             ));
@@ -280,8 +281,7 @@ mod platform {
         let dir_canon = std::fs::canonicalize(bin_dir).ok();
         if let (Some(a), Some(b)) = (seg_canon, dir_canon) {
             // Case-insensitive comparison on Windows
-            return a.to_string_lossy().to_lowercase()
-                == b.to_string_lossy().to_lowercase();
+            return a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase();
         }
         false
     }
@@ -319,12 +319,9 @@ mod platform {
     const MARKER_END: &str = "# <<< relay shim path <<<";
 
     /// Path entries to add per shell type.
-    const BASH_EXPORT: &str =
-        "export PATH=\"$HOME/.relay/bin:$PATH\"";
-    const ZSH_EXPORT: &str =
-        "export PATH=\"$HOME/.relay/bin:$PATH\"";
-    const FISH_EXPORT: &str =
-        "fish_add_path \"$HOME/.relay/bin\"";
+    const BASH_EXPORT: &str = "export PATH=\"$HOME/.relay/bin:$PATH\"";
+    const ZSH_EXPORT: &str = "export PATH=\"$HOME/.relay/bin:$PATH\"";
+    const FISH_EXPORT: &str = "fish_add_path \"$HOME/.relay/bin\"";
 
     /// Attempt to add the relay bin directory to the user's shell profile.
     pub fn install_to_profile() -> InstallOutcome {
@@ -332,8 +329,7 @@ mod platform {
             Ok(s) => s,
             Err(_) => {
                 return InstallOutcome::Unsupported(
-                    "$SHELL is not set — manually add the shim dir to your PATH"
-                        .into(),
+                    "$SHELL is not set — manually add the shim dir to your PATH".into(),
                 );
             }
         };
@@ -352,10 +348,7 @@ mod platform {
         // If the rc file doesn't exist yet, create it.
         let parent = rc_path.parent().unwrap();
         if let Err(e) = fs::create_dir_all(parent) {
-            return InstallOutcome::Failed(format!(
-                "could not create {}: {e}",
-                parent.display()
-            ));
+            return InstallOutcome::Failed(format!("could not create {}: {e}", parent.display()));
         }
 
         // Read existing content (if any) to check for our marker block.
@@ -376,9 +369,7 @@ mod platform {
         }
 
         // Append the block.
-        let block = format!(
-            "\n{MARKER_START}\n{export_line}\n{MARKER_END}\n"
-        );
+        let block = format!("\n{MARKER_START}\n{export_line}\n{MARKER_END}\n");
         let mut file = match fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -399,10 +390,7 @@ mod platform {
             ));
         }
         if let Err(e) = file.flush() {
-            return InstallOutcome::Failed(format!(
-                "could not flush {}: {e}",
-                rc_path.display()
-            ));
+            return InstallOutcome::Failed(format!("could not flush {}: {e}", rc_path.display()));
         }
 
         InstallOutcome::Installed
@@ -418,22 +406,13 @@ mod platform {
         let home = std::env::var("HOME").ok()?;
 
         match name {
-            "bash" => Some((
-                PathBuf::from(&home).join(".bashrc"),
-                BASH_EXPORT,
-            )),
-            "zsh" => Some((
-                PathBuf::from(&home).join(".zshrc"),
-                ZSH_EXPORT,
-            )),
+            "bash" => Some((PathBuf::from(&home).join(".bashrc"), BASH_EXPORT)),
+            "zsh" => Some((PathBuf::from(&home).join(".zshrc"), ZSH_EXPORT)),
             "fish" => Some((
                 PathBuf::from(&home).join(".config/fish/config.fish"),
                 FISH_EXPORT,
             )),
-            "sh" => Some((
-                PathBuf::from(&home).join(".profile"),
-                BASH_EXPORT,
-            )),
+            "sh" => Some((PathBuf::from(&home).join(".profile"), BASH_EXPORT)),
             _ => None,
         }
     }

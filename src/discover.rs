@@ -73,7 +73,11 @@ pub fn run(paths: &Paths, program: Option<&str>) -> Result<()> {
         // All-programs mode — group by target program.
         let total: usize = grouped.values().map(|v| v.len()).sum();
         for (prog, entries) in &grouped {
-            let label = if entries.len() == 1 { "alias" } else { "aliases" };
+            let label = if entries.len() == 1 {
+                "alias"
+            } else {
+                "aliases"
+            };
             ui::line(format!("{prog} ({} {label}):", entries.len()));
             for (alias, cmd) in entries {
                 let kind = format!("{:?}", cmd.kind);

@@ -272,16 +272,19 @@ pub fn import(paths: &Paths, file: &std::path::Path, overwrite: bool) -> Result<
     let mut overwritten = 0usize;
 
     for (name, cmd) in incoming.commands {
-        if current.commands.contains_key(&name) {
-            if overwrite {
-                current.commands.insert(name, cmd);
-                overwritten += 1;
-            } else {
-                skipped += 1;
+        match current.commands.entry(name) {
+            std::collections::btree_map::Entry::Occupied(mut e) => {
+                if overwrite {
+                    e.insert(cmd);
+                    overwritten += 1;
+                } else {
+                    skipped += 1;
+                }
             }
-        } else {
-            current.commands.insert(name, cmd);
-            added += 1;
+            std::collections::btree_map::Entry::Vacant(e) => {
+                e.insert(cmd);
+                added += 1;
+            }
         }
     }
 

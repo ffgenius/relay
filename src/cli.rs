@@ -187,9 +187,7 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         Command::Clear { yes } => registry::clear(&paths, *yes)?,
         Command::Run { name, args } => runner::run(&paths, name, args)?,
         Command::Export { output } => registry::export(&paths, output.as_deref())?,
-        Command::Import { file, overwrite } => {
-            registry::import(&paths, file, *overwrite)?
-        }
+        Command::Import { file, overwrite } => registry::import(&paths, file, *overwrite)?,
         Command::Sync { action } => match action {
             SyncAction::Init => sync::init(&paths)?,
             SyncAction::Push => sync::push(&paths)?,

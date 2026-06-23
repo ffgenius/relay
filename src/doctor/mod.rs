@@ -124,8 +124,7 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
                         ui::ok("shim dir added to PATH");
                         ui::note("open a new terminal for it to take effect");
                     }
-                    InstallOutcome::Unsupported(reason)
-                    | InstallOutcome::Failed(reason) => {
+                    InstallOutcome::Unsupported(reason) | InstallOutcome::Failed(reason) => {
                         ui::warn(format!("could not auto-update PATH: {reason}"));
                         ui::line(format!(
                             "       add `{}` to your PATH manually",

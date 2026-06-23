@@ -26,24 +26,36 @@ use owo_colors::{OwoColorize, Stream};
 
 /// Print a green `[ok ]` followed by `msg`.
 pub fn ok(msg: impl Display) {
-    println!("{} {msg}", "[ok ]".if_supports_color(Stream::Stdout, |t| t.green()));
+    println!(
+        "{} {msg}",
+        "[ok ]".if_supports_color(Stream::Stdout, |t| t.green())
+    );
 }
 
 /// Print a yellow `[warn]` followed by `msg`.
 pub fn warn(msg: impl Display) {
-    println!("{} {msg}", "[warn]".if_supports_color(Stream::Stdout, |t| t.yellow()));
+    println!(
+        "{} {msg}",
+        "[warn]".if_supports_color(Stream::Stdout, |t| t.yellow())
+    );
 }
 
 /// Print a red `[err ]` followed by `msg` to **stderr**.
 pub fn err(msg: impl Display) {
-    eprintln!("{} {msg}", "[err ]".if_supports_color(Stream::Stderr, |t| t.red()));
+    eprintln!(
+        "{} {msg}",
+        "[err ]".if_supports_color(Stream::Stderr, |t| t.red())
+    );
 }
 
 /// A neutral note — useful for "Open a new terminal" / "Re-link any time".
 /// Renders as cyan `[note]` so it's distinct from warnings without
 /// implying anything is wrong.
 pub fn note(msg: impl Display) {
-    println!("{} {msg}", "[note]".if_supports_color(Stream::Stdout, |t| t.cyan()));
+    println!(
+        "{} {msg}",
+        "[note]".if_supports_color(Stream::Stdout, |t| t.cyan())
+    );
 }
 
 /// Bold section header. Used for "relay root: ..." blocks at the top of
