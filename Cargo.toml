@@ -28,7 +28,7 @@ thiserror = "2"
 which = "6"
 
 [target.'cfg(windows)'.dependencies]
-enable-ansi-support = "0.2"
+enable-ansi-support = "0.3"
 winreg = "0.56"
 
 [dev-dependencies]
