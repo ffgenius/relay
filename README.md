@@ -60,7 +60,7 @@ The script detects your OS and architecture, downloads the right binary from
 GitHub Releases, installs it to `~/.relay/bin/`, and runs `relay init` for
 automatic shell integration (bash / zsh / fish).
 
-**Options:** `--version 0.0.6` to pin a version; `--no-init` to skip
+**Options:** `--version 0.1.0` to pin a version; `--no-init` to skip
 shell-profile changes.
 
 ### PowerShell (Windows)
@@ -72,7 +72,7 @@ irm https://raw.githubusercontent.com/ffgenius/relay/master/install.ps1 | iex
 Same behaviour as the shell installer: downloads the right binary, installs to
 `~\.relay\bin\`, and adds it to your user `PATH` via the registry.
 
-**Options:** `-Version 0.0.6` to pin a version; `-NoInit` to skip PATH setup.
+**Options:** `-Version 0.1.0` to pin a version; `-NoInit` to skip PATH setup.
 
 ### npm
 

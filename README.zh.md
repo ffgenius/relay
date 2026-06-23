@@ -59,7 +59,7 @@ wget -qO- https://raw.githubusercontent.com/ffgenius/relay/master/install.sh | s
 脚本会自动检测你的操作系统和 CPU 架构，从 GitHub Releases 下载对应二进制，
 安装到 `~/.relay/bin/`，并执行 `relay init` 完成 shell 集成（bash / zsh / fish）。
 
-**可选项：** `--version 0.0.6` 指定版本；`--no-init` 跳过 shell 配置写入。
+**可选项：** `--version 0.1.0` 指定版本；`--no-init` 跳过 shell 配置写入。
 
 ### PowerShell（Windows）
 
@@ -69,7 +69,7 @@ irm https://raw.githubusercontent.com/ffgenius/relay/master/install.ps1 | iex
 
 行为同上：下载对应二进制，安装到 `~\.relay\bin\`，通过注册表将目录加入用户 `PATH`。
 
-**可选项：** `-Version 0.0.6` 指定版本；`-NoInit` 跳过 PATH 设置。
+**可选项：** `-Version 0.1.0` 指定版本；`-NoInit` 跳过 PATH 设置。
 
 ### npm
 
