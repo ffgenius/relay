@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use crate::{
     config::{self, Paths},
-    discover, doctor, registry, runner, shim, sync, Result,
+    discover, doctor, registry, runner, shim, sync, ui, Result,
 };
 
 #[derive(Debug, Parser)]
@@ -182,7 +182,7 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         Command::Rebuild => {
             let config = config::load(&paths)?;
             shim::sync(&paths, &config)?;
-            println!("shims regenerated");
+            ui::ok("shims regenerated");
         }
         Command::Clear { yes } => registry::clear(&paths, *yes)?,
         Command::Run { name, args } => runner::run(&paths, name, args)?,

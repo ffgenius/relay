@@ -14,5 +14,6 @@ pub mod registry;
 pub mod runner;
 pub mod shim;
 pub mod sync;
+pub mod ui;
 
 pub use error::{RelayError, Result};

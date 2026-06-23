@@ -9,7 +9,7 @@ use std::fs;
 use crate::{
     config::{self, Command, CommandKind, Config, Paths},
     path_setup::{self, InstallOutcome},
-    RelayError, Result,
+    ui, RelayError, Result,
 };
 
 /// Programs that are never allowed as a registration target — registering a
@@ -34,7 +34,7 @@ pub fn init(paths: &Paths) -> Result<()> {
     if !paths.config_file().exists() {
         config::save(paths, &Config::default())?;
     }
-    println!("relay initialised at {}", paths.root().display());
+    ui::ok(format!("relay initialised at {}", paths.root().display()));
 
     // Only touch the user's persistent PATH for the canonical relay root.
     // Sandboxed runs (tests / `--root`) get the shim dir created but skip
@@ -47,17 +47,18 @@ pub fn init(paths: &Paths) -> Result<()> {
     // then pick `n`, `v`, etc. up automatically.
     match path_setup::install(paths) {
         InstallOutcome::AlreadyPresent => {
-            println!("[ok ]  shim dir already on PATH");
+            ui::ok("shim dir already on PATH");
         }
         InstallOutcome::Installed => {
-            println!("[ok ]  shim dir added to PATH — open a new terminal for it to take effect");
+            ui::ok("shim dir added to PATH");
+            ui::note("open a new terminal for it to take effect");
         }
         InstallOutcome::Unsupported(reason) | InstallOutcome::Failed(reason) => {
-            println!("[warn] could not auto-update PATH: {reason}");
-            println!(
+            ui::warn(format!("could not auto-update PATH: {reason}"));
+            ui::line(format!(
                 "       add `{}` to your PATH manually",
                 paths.bin_dir().display()
-            );
+            ));
         }
     }
     Ok(())
@@ -103,7 +104,7 @@ pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<
     } else {
         format!(" {}", args.join(" "))
     };
-    println!("added {name} -> {program}{suffix}");
+    ui::ok(format!("added {name} -> {program}{suffix}"));
     Ok(())
 }
 
@@ -114,7 +115,7 @@ pub fn remove(paths: &Paths, name: &str) -> Result<()> {
         return Err(RelayError::UnknownCommand(name.to_string()));
     }
     config::save(paths, &config)?;
-    println!("removed {name}");
+    ui::ok(format!("removed {name}"));
     Ok(())
 }
 
@@ -128,7 +129,7 @@ pub fn clear(paths: &Paths, auto_yes: bool) -> Result<()> {
     let mut config = config::load(paths)?;
     let count = config.commands.len();
     if count == 0 {
-        println!("(no commands registered)");
+        ui::line("(no commands registered)");
         return Ok(());
     }
 
@@ -140,14 +141,14 @@ pub fn clear(paths: &Paths, auto_yes: bool) -> Result<()> {
         std::io::stdin().lock().read_line(&mut line).ok();
         let trimmed = line.trim().to_lowercase();
         if trimmed != "y" && trimmed != "yes" {
-            println!("cancelled.");
+            ui::line("cancelled.");
             return Ok(());
         }
     }
 
     config.commands.clear();
     config::save(paths, &config)?;
-    println!("cleared {count} alias(es)");
+    ui::ok(format!("cleared {count} alias(es)"));
     Ok(())
 }
 
@@ -172,7 +173,7 @@ pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Resu
     } else {
         format!(" {}", args.join(" "))
     };
-    println!("updated {name} -> {program}{suffix}");
+    ui::ok(format!("updated {name} -> {program}{suffix}"));
     Ok(())
 }
 
@@ -180,20 +181,12 @@ pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Resu
 pub fn list(paths: &Paths) -> Result<()> {
     let config = config::load(paths)?;
     if config.commands.is_empty() {
-        println!("(no commands registered — try `relay add v vite`)");
+        ui::line("(no commands registered — try `relay add v vite`)");
         return Ok(());
     }
     for (name, cmd) in &config.commands {
-        let suffix = if cmd.args.is_empty() {
-            String::new()
-        } else {
-            format!(" {}", cmd.args.join(" "))
-        };
-        println!(
-            "{name:<12} [{kind:?}] {program}{suffix}",
-            kind = cmd.kind,
-            program = cmd.program
-        );
+        let kind = format!("{:?}", cmd.kind);
+        ui::alias_line(name, &cmd.program, &cmd.args, &kind);
     }
     Ok(())
 }
@@ -205,10 +198,10 @@ pub fn info(paths: &Paths, name: &str) -> Result<()> {
         .commands
         .get(name)
         .ok_or_else(|| RelayError::UnknownCommand(name.to_string()))?;
-    println!("name    : {name}");
-    println!("type    : {:?}", cmd.kind);
-    println!("program : {}", cmd.program);
-    println!("args    : {:?}", cmd.args);
+    ui::field("name", name);
+    ui::field("type", format!("{:?}", cmd.kind));
+    ui::field("program", &cmd.program);
+    ui::field("args", format!("{:?}", cmd.args));
     Ok(())
 }
 
@@ -239,11 +232,11 @@ pub fn export(paths: &Paths, output: Option<&std::path::Path>) -> Result<()> {
                 path: target.clone(),
                 source,
             })?;
-            println!(
+            ui::ok(format!(
                 "exported {} command(s) to {}",
                 config.commands.len(),
                 target.display()
-            );
+            ));
         }
     }
     Ok(())
@@ -293,7 +286,9 @@ pub fn import(paths: &Paths, file: &std::path::Path, overwrite: bool) -> Result<
     }
 
     config::save(paths, &current)?;
-    println!("imported: {added} added, {overwritten} overwritten, {skipped} skipped");
+    ui::ok(format!(
+        "imported: {added} added, {overwritten} overwritten, {skipped} skipped"
+    ));
     Ok(())
 }
 

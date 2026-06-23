@@ -30,7 +30,7 @@
 use std::collections::BTreeMap;
 
 use crate::config::{self, Paths};
-use crate::Result;
+use crate::{ui, Result};
 
 /// Run discover with an optional program filter.
 ///
@@ -39,7 +39,7 @@ use crate::Result;
 pub fn run(paths: &Paths, program: Option<&str>) -> Result<()> {
     let config = config::load(paths)?;
     if config.commands.is_empty() {
-        println!("(no commands registered)");
+        ui::line("(no commands registered)");
         return Ok(());
     }
 
@@ -57,20 +57,15 @@ pub fn run(paths: &Paths, program: Option<&str>) -> Result<()> {
         // Single-program mode — show only that program's aliases.
         match grouped.get(filter) {
             None => {
-                println!("{filter} has no registered aliases");
+                ui::line(format!("{filter} has no registered aliases"));
             }
             Some(entries) => {
                 let count = entries.len();
                 let label = if count == 1 { "alias" } else { "aliases" };
-                println!("{filter} ({count} {label}):");
+                ui::line(format!("{filter} ({count} {label}):"));
                 for (alias, cmd) in entries {
-                    let suffix = if cmd.args.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" {}", cmd.args.join(" "))
-                    };
                     let kind = format!("{:?}", cmd.kind);
-                    println!("  {alias:<12} → {}{suffix}  [{kind}]", cmd.program);
+                    ui::alias_line(alias, &cmd.program, &cmd.args, &kind);
                 }
             }
         }
@@ -79,19 +74,14 @@ pub fn run(paths: &Paths, program: Option<&str>) -> Result<()> {
         let total: usize = grouped.values().map(|v| v.len()).sum();
         for (prog, entries) in &grouped {
             let label = if entries.len() == 1 { "alias" } else { "aliases" };
-            println!("{prog} ({} {label}):", entries.len());
+            ui::line(format!("{prog} ({} {label}):", entries.len()));
             for (alias, cmd) in entries {
-                let suffix = if cmd.args.is_empty() {
-                    String::new()
-                } else {
-                    format!(" {}", cmd.args.join(" "))
-                };
                 let kind = format!("{:?}", cmd.kind);
-                println!("  {alias:<12} → {}{suffix}  [{kind}]", cmd.program);
+                ui::alias_line(alias, &cmd.program, &cmd.args, &kind);
             }
-            println!();
+            ui::blank();
         }
-        println!("total: {total} alias(es)");
+        ui::line(format!("total: {total} alias(es)"));
     }
 
     Ok(())

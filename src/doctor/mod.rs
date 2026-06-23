@@ -15,14 +15,14 @@ use std::path::PathBuf;
 use crate::{
     config::{self, Paths},
     path_setup::{self, InstallOutcome},
-    shim, Result,
+    shim, ui, Result,
 };
 
 pub fn run(paths: &Paths, fix: bool) -> Result<()> {
-    println!("relay root : {}", paths.root().display());
-    println!("config file: {}", paths.config_file().display());
-    println!("shim dir   : {}", paths.bin_dir().display());
-    println!();
+    ui::header("relay root :", paths.root().display());
+    ui::header("config file:", paths.config_file().display());
+    ui::header("shim dir   :", paths.bin_dir().display());
+    ui::blank();
 
     let mut issues = 0usize;
 
@@ -30,14 +30,14 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
     // Done first so the rest can lean on a parsed Config.
     let config = match config::load(paths) {
         Ok(c) => {
-            println!(
-                "[ok ]  config parses cleanly ({} commands)",
+            ui::ok(format!(
+                "config parses cleanly ({} commands)",
                 c.commands.len()
-            );
+            ));
             c
         }
         Err(e) => {
-            println!("[err]  config failed to parse: {e}");
+            ui::err(format!("config failed to parse: {e}"));
             // Without a config the remaining checks can't proceed.
             return Ok(());
         }
@@ -47,12 +47,12 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
     let bin_dir = paths.bin_dir();
     let path_ok = path_contains(&bin_dir);
     if path_ok {
-        println!("[ok ]  shim dir is on PATH");
+        ui::ok("shim dir is on PATH");
     } else {
-        println!(
-            "[warn] shim dir is NOT on PATH — add {} to your shell profile",
+        ui::warn(format!(
+            "shim dir is NOT on PATH — add {} to your shell profile",
             bin_dir.display()
-        );
+        ));
         issues += 1;
     }
 
@@ -60,9 +60,9 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
     let mut missing_programs = Vec::new();
     for (name, cmd) in &config.commands {
         match which::which(&cmd.program) {
-            Ok(_) => println!("[ok ]  program {name} -> {} on PATH", cmd.program),
+            Ok(_) => ui::ok(format!("program {name} -> {} on PATH", cmd.program)),
             Err(_) => {
-                println!("[warn] program {name} -> {} NOT on PATH", cmd.program);
+                ui::warn(format!("program {name} -> {} NOT on PATH", cmd.program));
                 missing_programs.push(name.clone());
                 issues += 1;
             }
@@ -74,9 +74,9 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
     for name in config.commands.keys() {
         let target = bin_dir.join(platform_shim_file(name));
         if target.exists() {
-            println!("[ok ]  shim {name} present");
+            ui::ok(format!("shim {name} present"));
         } else {
-            println!("[warn] shim {name} missing");
+            ui::warn(format!("shim {name} missing"));
             shim_issues.push(name.clone());
             issues += 1;
         }
@@ -87,22 +87,22 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
             let fname = entry.file_name().to_string_lossy().to_string();
             let stripped = strip_shim_ext(&fname);
             if !config.commands.contains_key(stripped) {
-                println!("[warn] orphan shim file: {fname}");
+                ui::warn(format!("orphan shim file: {fname}"));
                 shim_issues.push(stripped.to_string());
                 issues += 1;
             }
         }
     }
 
-    println!();
+    ui::blank();
     if issues == 0 {
-        println!("all good.");
+        ui::line("all good.");
         return Ok(());
     }
 
     if fix {
         if !shim_issues.is_empty() {
-            println!("fixing {} shim issue(s)...", shim_issues.len());
+            ui::line(format!("fixing {} shim issue(s)...", shim_issues.len()));
             shim::sync(paths, &config)?;
         }
         if !path_ok {
@@ -110,35 +110,36 @@ pub fn run(paths: &Paths, fix: bool) -> Result<()> {
             // sandboxed root (tests / `--root <tmpdir>`) — only the real
             // `~/.relay` should ever touch the user's environment.
             if !is_default_root(paths) {
-                println!(
-                    "[warn] PATH not modified — running with a non-default root.\n       add `{}` to your PATH manually",
+                ui::warn(format!(
+                    "PATH not modified — running with a non-default root.\n       add `{}` to your PATH manually",
                     bin_dir.display()
-                );
+                ));
             } else {
-                println!("fixing PATH...");
+                ui::line("fixing PATH...");
                 match path_setup::install(paths) {
                     InstallOutcome::AlreadyPresent => {
-                        println!("[ok ]  shim dir already on PATH");
+                        ui::ok("shim dir already on PATH");
                     }
                     InstallOutcome::Installed => {
-                        println!(
-                            "[ok ]  shim dir added to PATH — open a new terminal for it to take effect"
-                        );
+                        ui::ok("shim dir added to PATH");
+                        ui::note("open a new terminal for it to take effect");
                     }
                     InstallOutcome::Unsupported(reason)
                     | InstallOutcome::Failed(reason) => {
-                        println!("[warn] could not auto-update PATH: {reason}");
-                        println!(
+                        ui::warn(format!("could not auto-update PATH: {reason}"));
+                        ui::line(format!(
                             "       add `{}` to your PATH manually",
                             bin_dir.display()
-                        );
+                        ));
                     }
                 }
             }
         }
-        println!("done. re-run `relay doctor` to verify.");
+        ui::line("done. re-run `relay doctor` to verify.");
     } else {
-        println!("{issues} issue(s) found. re-run with --fix to repair.");
+        ui::line(format!(
+            "{issues} issue(s) found. re-run with --fix to repair."
+        ));
     }
 
     Ok(())

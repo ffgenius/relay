@@ -18,7 +18,7 @@ use std::{
 };
 
 use crate::config::{self, Config, Paths};
-use crate::{RelayError, Result};
+use crate::{ui, RelayError, Result};
 
 /// Sync state persisted as `~/.relay/sync-state.yaml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -44,8 +44,15 @@ pub fn init(paths: &Paths) -> Result<()> {
     let content = config_yaml_string(&config)?;
     let hash = sha256_hex(&content);
 
-    println!("Creating a secret GitHub Gist...");
-    let gist_id = create_gist(&content)?;
+    let pb = ui::spinner("Creating a secret GitHub Gist...");
+    let gist_id = match create_gist(&content) {
+        Ok(id) => id,
+        Err(e) => {
+            pb.finish_and_clear();
+            return Err(e);
+        }
+    };
+    ui::spinner_finish(&pb, format!("Gist created (id: {gist_id})"));
 
     save_sync_state(paths, &SyncState {
         provider: "gist".into(),
@@ -53,9 +60,13 @@ pub fn init(paths: &Paths) -> Result<()> {
         synced_hash: hash,
     })?;
 
-    println!("✔ Gist created: https://gist.github.com/{gist_id}");
-    println!("  Use `relay sync push` to upload, `relay sync pull` to download.");
-    println!("  On another machine, run `relay sync init` and paste this Gist ID.");
+    ui::line(format!(
+        "  url: https://gist.github.com/{gist_id}"
+    ));
+    ui::note("`relay sync push` uploads, `relay sync pull` downloads.");
+    ui::note(format!(
+        "on another machine, run `relay sync link {gist_id}`."
+    ));
     Ok(())
 }
 
@@ -65,14 +76,23 @@ pub fn init(paths: &Paths) -> Result<()> {
 ///
 /// After linking, run `relay sync pull` to download the aliases.
 pub fn link(paths: &Paths, gist_id: &str) -> Result<()> {
+    let pb = ui::spinner("Verifying Gist...");
     // Verify the Gist exists and has a config.yaml file.
-    let content = download_gist(gist_id)?;
+    let content = match download_gist(gist_id) {
+        Ok(c) => c,
+        Err(e) => {
+            pb.finish_and_clear();
+            return Err(e);
+        }
+    };
     // Parse to validate it's a config we understand.
     let _config: Config = serde_yaml::from_str(&content).map_err(|e| {
+        pb.finish_and_clear();
         RelayError::Other(anyhow::anyhow!(
             "Gist {gist_id} doesn't contain a valid relay config: {e}"
         ))
     })?;
+    ui::spinner_finish(&pb, format!("Linked to Gist {gist_id}"));
 
     let hash = sha256_hex(&content);
     save_sync_state(paths, &SyncState {
@@ -81,8 +101,7 @@ pub fn link(paths: &Paths, gist_id: &str) -> Result<()> {
         synced_hash: hash,
     })?;
 
-    println!("✔ Linked to Gist {gist_id}");
-    println!("  Run `relay sync pull` to download aliases.");
+    ui::note("run `relay sync pull` to download aliases.");
     Ok(())
 }
 
@@ -95,7 +114,7 @@ pub fn link(paths: &Paths, gist_id: &str) -> Result<()> {
 pub fn unlink(paths: &Paths) -> Result<()> {
     let path = sync_state_path(paths);
     if !path.exists() {
-        println!("sync: not configured — nothing to unlink");
+        ui::line("sync: not configured — nothing to unlink");
         return Ok(());
     }
 
@@ -108,12 +127,15 @@ pub fn unlink(paths: &Paths) -> Result<()> {
         source,
     })?;
 
-    println!("✔ Unlinked from Gist {}", state.gist_id);
-    println!(
-        "  The Gist still exists at https://gist.github.com/{}",
+    ui::ok(format!("unlinked from Gist {}", state.gist_id));
+    ui::note(format!(
+        "the Gist still exists at https://gist.github.com/{}",
         state.gist_id
-    );
-    println!("  Re-link any time with `relay sync link {}`.", state.gist_id);
+    ));
+    ui::note(format!(
+        "re-link any time with `relay sync link {}`.",
+        state.gist_id
+    ));
     Ok(())
 }
 
@@ -126,15 +148,21 @@ pub fn push(paths: &Paths) -> Result<()> {
     let content = config_yaml_string(&config)?;
     let hash = sha256_hex(&content);
 
-    println!("Uploading config to Gist {}...", state.gist_id);
-    update_gist(&state.gist_id, &content)?;
+    let pb = ui::spinner("Uploading to Gist...");
+    if let Err(e) = update_gist(&state.gist_id, &content) {
+        pb.finish_and_clear();
+        return Err(e);
+    }
+    ui::spinner_finish(
+        &pb,
+        format!("Pushed ({} commands)", config.commands.len()),
+    );
 
     save_sync_state(paths, &SyncState {
         synced_hash: hash,
         ..state
     })?;
 
-    println!("✔ Pushed ({} total commands)", config.commands.len());
     Ok(())
 }
 
@@ -152,21 +180,28 @@ pub fn pull(paths: &Paths) -> Result<()> {
     let local_hash = sha256_hex(&local_content);
 
     if local_hash != state.synced_hash && !local_config.commands.is_empty() {
-        println!(
-            "⚠ Local config has changed since last sync.\n\
-             `relay sync pull` will overwrite those changes with the remote version."
+        ui::warn(
+            "local config has changed since last sync.\n       \
+             `relay sync pull` will overwrite those changes with the remote version.",
         );
         if !prompt_continue() {
-            println!("  cancelled.");
+            ui::line("  cancelled.");
             return Ok(());
         }
     }
 
-    println!("Downloading config from Gist {}...", state.gist_id);
-    let remote_content = download_gist(&state.gist_id)?;
+    let pb = ui::spinner("Downloading from Gist...");
+    let remote_content = match download_gist(&state.gist_id) {
+        Ok(c) => c,
+        Err(e) => {
+            pb.finish_and_clear();
+            return Err(e);
+        }
+    };
 
     // The Gist stores a config.yaml file, parse it.
     let remote_config: Config = serde_yaml::from_str(&remote_content).map_err(|e| {
+        pb.finish_and_clear();
         RelayError::Other(anyhow::anyhow!("invalid config in Gist: {e}"))
     })?;
 
@@ -182,9 +217,12 @@ pub fn pull(paths: &Paths) -> Result<()> {
     // Re-sync shims.
     crate::shim::sync(paths, &remote_config)?;
 
-    println!(
-        "✔ Pulled ({} commands). Shims regenerated.",
-        remote_config.commands.len()
+    ui::spinner_finish(
+        &pb,
+        format!(
+            "Pulled ({} commands). Shims regenerated.",
+            remote_config.commands.len()
+        ),
     );
     Ok(())
 }
@@ -193,38 +231,41 @@ pub fn pull(paths: &Paths) -> Result<()> {
 pub fn status(paths: &Paths) -> Result<()> {
     let state_path = sync_state_path(paths);
     if !state_path.exists() {
-        println!("sync: not configured");
-        println!("  run `relay sync init` to set up GitHub Gist sync.");
+        ui::line("sync: not configured");
+        ui::note("run `relay sync init` to set up GitHub Gist sync.");
         return Ok(());
     }
 
     let state = load_sync_state(paths)?;
-    println!("sync: configured");
-    println!("  provider: {}", state.provider);
-    println!("  gist id:  {}", state.gist_id);
+    ui::line("sync: configured");
+    ui::field("provider", &state.provider);
+    ui::field("gist id", &state.gist_id);
 
     let config = config::load(paths)?;
     let content = config_yaml_string(&config)?;
     let local_hash = sha256_hex(&content);
 
     if local_hash == state.synced_hash {
-        println!("  state:    clean (local matches remote)");
+        ui::ok("state: clean (local matches remote)");
     } else {
-        println!("  state:    dirty (local has un-pushed changes)");
+        ui::warn("state: dirty (local has un-pushed changes)");
     }
-    println!(
-        "  commands: {} ({} prefix, {} exact)",
-        config.commands.len(),
-        config
-            .commands
-            .values()
-            .filter(|c| matches!(c.kind, config::CommandKind::Prefix))
-            .count(),
-        config
-            .commands
-            .values()
-            .filter(|c| matches!(c.kind, config::CommandKind::Exact))
-            .count(),
+    ui::field(
+        "commands",
+        format!(
+            "{} ({} prefix, {} exact)",
+            config.commands.len(),
+            config
+                .commands
+                .values()
+                .filter(|c| matches!(c.kind, config::CommandKind::Prefix))
+                .count(),
+            config
+                .commands
+                .values()
+                .filter(|c| matches!(c.kind, config::CommandKind::Exact))
+                .count(),
+        ),
     );
 
     Ok(())
