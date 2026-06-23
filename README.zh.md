@@ -264,9 +264,13 @@ Windows 在创建进程时会把组合后的 PATH 截断到 2047 字符。`relay
 ```bash
 git clone https://github.com/ffgenius/relay
 cd relay
+git config core.hooksPath .githooks   # 启用提交前自动格式化
 cargo build
 cargo test
 ```
+
+pre-commit hook 会在提交前自动对已暂存的 `.rs` 文件执行 `cargo fmt --all`。
+如需临时跳过，使用 `git commit --no-verify`。
 
 欢迎 issue 和 PR。
 
