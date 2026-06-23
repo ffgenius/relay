@@ -29,7 +29,7 @@ which = "6"
 
 [target.'cfg(windows)'.dependencies]
 enable-ansi-support = "0.2"
-winreg = "0.52"
+winreg = "0.56"
 
 [dev-dependencies]
 assert_cmd = "2"
