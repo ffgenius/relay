@@ -1,0 +1,272 @@
+# Relay
+
+> **安全的跨平台命令路由器。** 输入 `v dev`，执行 `vite dev`。不依赖 shell alias，不藏任何意外。
+
+[![npm](https://img.shields.io/npm/v/@ffgenius/relay.svg)](https://www.npmjs.com/package/@ffgenius/relay)
+[![license](https://img.shields.io/npm/l/@ffgenius/relay.svg)](./LICENSE)
+
+[English](./README.md)
+
+---
+
+## 为什么需要 Relay？
+
+Shell alias 能用，直到它不好用：
+
+- bash / zsh / fish / PowerShell 的 alias 语法各不相同，跨 shell 共享配置很折腾。
+- alias 在 **shell 内部** 展开 —— `alias g='git'` 本质是字符串宏，你打 `g` 不一定真的跑你以为的那个二进制。
+- 它们藏在 dotfiles 里。换电脑就丢，换 shell 也丢。
+
+**Relay 不走 shell 路由命令。** 每个简写对应一个小启动器（"shim"），它调用 relay 的 runner，runner 直接 spawn 目标程序 —— 不走 `sh -c`，不解析字符串，没有意外。
+
+```bash
+relay add v vite      # 注册
+v dev                 # 执行 vite dev — 从不经过 shell
+v build               # 执行 vite build
+```
+
+Linux、macOS、Windows 行为完全一致，配置文件可以直接跨平台同步。
+
+---
+
+## 安装
+
+```bash
+npm install -g @ffgenius/relay
+```
+
+npm 会通过 optionalDependencies 自动下载当前平台的二进制（`linux-x64` / `linux-arm64` / `darwin-x64` / `darwin-arm64` / `win32-x64` / `win32-arm64`），其余平台的包不占空间。
+
+安装后，初始化：
+
+```bash
+relay init
+```
+
+这会创建 `~/.relay/` 目录，并把 `~/.relay/bin` 加入到你的 `PATH`。**请打开一个新的终端** 让 PATH 改动生效。
+
+---
+
+## 快速上手
+
+```bash
+# Prefix 简写 —— `v <任何参数>` 等价于 `vite <任何参数>`
+relay add v vite
+
+# Exact 简写 —— `vd` 永远执行 `vite dev`，不接受任何额外参数
+relay add vd vite dev
+
+# 使用
+v dev                 # → vite dev
+v build               # → vite build
+vd                    # → vite dev
+
+# 查询
+relay list            # 列出所有简写（也可以 relay ls）
+relay info v          # 查看单个简写的详情
+relay discover vite   # 按目标程序聚合查看
+
+# 诊断
+relay doctor          # 检查 PATH / shim / 配置
+relay doctor --fix    # 自动修复缺失的 shim 和 PATH
+```
+
+---
+
+## 两种简写
+
+### Prefix 简写
+
+`relay add <name> <program>` —— 你在 `<name>` 之后输入的所有参数都透传给目标程序。
+
+```bash
+relay add v vite
+v dev      # → vite dev
+v build    # → vite build
+v --help   # → vite --help
+```
+
+### Exact 简写
+
+`relay add <name> <program> <args...>` —— 参数被固化，运行时输入的参数会被忽略。
+
+```bash
+relay add vd vite dev
+vd         # → vite dev（永远）
+```
+
+**Prefix** 适合你经常用多个子命令的工具（`v`、`g`、`n`）；**Exact** 适合你天天敲的高频组合（`vd`、`gp`、`nci`）。
+
+---
+
+## 命令参考
+
+### 基础
+
+| 命令 | 说明 |
+|---|---|
+| `relay init` | 创建 `~/.relay`，写入空 config，并把 `~/.relay/bin` 加入 PATH |
+| `relay add <name> <program> [args...]` | 注册简写（无参数为 prefix，有参数为 exact） |
+| `relay remove <name>`（别名 `rm`） | 删除简写 |
+| `relay update <name> <program> [args...]` | 修改已有的简写 |
+| `relay list`（别名 `ls`） | 列出所有简写（按名字排序） |
+| `relay info <name>` | 查看单个简写的详情 |
+
+### 查询
+
+| 命令 | 说明 |
+|---|---|
+| `relay discover` | 按目标程序聚合显示所有简写 |
+| `relay discover <program>` | 只显示某个程序的所有简写 |
+
+### 备份与同步
+
+| 命令 | 说明 |
+|---|---|
+| `relay export` | 把当前配置以 YAML 形式打印到 stdout |
+| `relay export -o <file>` | 导出到文件（如果省略后缀会自动补 `.yaml`） |
+| `relay import <file>` | 从文件合并配置（冲突时保留本地） |
+| `relay import <file> --overwrite` | 从文件合并配置（冲突时覆盖本地） |
+| `relay sync init` | 创建私密 GitHub Gist 并把本机绑定上去 |
+| `relay sync link <gist_id>` | 把本机绑定到已有的 Gist |
+| `relay sync push` | 上传本地配置到 Gist |
+| `relay sync pull` | 从 Gist 下载配置（会覆盖本地） |
+| `relay sync status` | 查看同步是否配置、是否有未推送的变更 |
+
+### 系统
+
+| 命令 | 说明 |
+|---|---|
+| `relay doctor` | 检查 PATH / shim / 配置完整性 |
+| `relay doctor --fix` | 自动重建缺失的 shim 并加入 PATH |
+| `relay rebuild-shims` | 全量重置：根据当前配置重新生成所有 shim |
+
+---
+
+## 多机同步
+
+Relay 通过你已登录的 `gh` CLI 把配置同步到 **私密的 GitHub Gist**。无需自己管理 token。
+
+**机器 A（第一次）：**
+
+```bash
+gh auth login                 # 还没登过的话
+relay add v vite              # 先注册几条
+relay add g git
+relay sync init               # → 创建 Gist，打印 ID
+```
+
+**机器 B（另一台）：**
+
+```bash
+gh auth login
+relay sync link <gist_id>     # 上面 sync init 打印的 ID
+relay sync pull               # 下载所有简写、重建 shim
+```
+
+**日常使用：**
+
+```bash
+relay add p pnpm              # 在机器 A 加新简写
+relay sync push               # 推送
+# ...稍后，在机器 B：
+relay sync pull               # 拉取最新
+```
+
+`relay sync status` 会告诉你本地相对远端是 clean 还是 dirty；`pull` 在本地有未推送的修改时会先警告再确认。
+
+---
+
+## 安全模型
+
+Relay 的卖点就是 **构造性安全** —— 跑 `v dev` 必须和直接跑 `vite dev` **等价到无聊**。下面 4 条原则是代码级强制：
+
+> **原则 1 — Relay 不执行 shell。**
+> 不调用 `sh -c`，不调用 `cmd /c`，不调用 `powershell -Command`。runner 用 `std::process::Command` 直接 spawn 目标二进制。
+
+> **原则 2 — Relay 不执行字符串。**
+> 一条简写在内部是 `(program, args)` 元组。不存在 `exec: "vite dev && rm -rf /"` 这种字段。"字符串当命令"在数据结构里根本不存在。
+
+> **原则 3 — Relay 只执行已注册的、确实存在的可执行文件。**
+> `relay add` 会调 `which(<program>)` 校验存在；含路径分隔符（`/` 或 `\`）的程序名也会被拒绝 —— 只允许裸命令名。这意味着恶意 Gist 没法通过 `relay sync pull` 偷塞 `/tmp/evil-cargo` 到你的配置里。
+
+> **原则 4 — Shell 在黑名单上。**
+> `sh`、`bash`、`zsh`、`cmd`、`powershell`、`pwsh` 不能作为简写的目标程序。即使你 `relay add x sh`，relay 也会拒绝。
+
+这些规则同时也保证 Relay 自身不会成为攻击面 —— shim 到二进制这条路径上不存在 shell escape。
+
+---
+
+## 配置文件
+
+所有数据都在 `~/.relay/` 下：
+
+```
+~/.relay/
+├── config.yaml          # 已注册的简写
+├── sync-state.yaml      # （可选）已绑定的 Gist ID + 同步哈希
+└── bin/                 # 生成的 shim，这个目录被加入 PATH
+    ├── v                # Windows 下是 v.cmd
+    ├── vd
+    └── ...
+```
+
+`config.yaml` 是可读可手改的（手改后记得跑 `relay rebuild-shims` 重建 shim）：
+
+```yaml
+version: 1
+commands:
+  v:
+    type: prefix
+    program: vite
+  vd:
+    type: exact
+    program: vite
+    args:
+      - dev
+```
+
+---
+
+## 故障排查
+
+### 明明 `relay add n nvm` 成功了，跑 `n` 却报 "command not found"
+
+你当前的 shell 还没拿到新 PATH。先跑：
+
+```bash
+relay doctor
+```
+
+如果显示 `shim dir is NOT on PATH`，跑 `relay doctor --fix`，**然后开一个新终端**。
+
+Windows 上，注册表的 PATH 改动可能不会立刻传播到已开的 `cmd` 窗口 —— 必要时注销重新登录。开了新终端还不行的话，再跑一次 `relay doctor` 看具体原因。
+
+### 第一次执行 `relay` 报 `EPERM`（Windows）
+
+Windows Defender / SmartScreen 第一次见到刚装的 `relay.exe` 时会做实时扫描，扫描期间 spawn 会失败。等一两秒重跑同样的命令就好了，每次安装只会发生一次。
+
+### PATH "太长"，新加的条目看不见
+
+Windows 在创建进程时会把组合后的 PATH 截断到 2047 字符。`relay init` 把 shim 目录写到用户 PATH 的 **开头**（不是末尾），就是为了避开截断；不过如果你的 PATH 已经非常拥挤，一些条目仍然可能丢。`relay doctor` 在用户 PATH 超过 1900 字符时会发出提醒。
+
+### Sync 报 `gh: not authenticated`
+
+跑一次 `gh auth login` 即可。Relay 直接复用你的 GitHub CLI 登录态，不会自己管理 token。
+
+---
+
+## 参与
+
+```bash
+git clone https://github.com/ffgenius/relay
+cd relay
+cargo build
+cargo test
+```
+
+欢迎 issue 和 PR。
+
+## 协议
+
+[MIT](./LICENSE) © Bin
