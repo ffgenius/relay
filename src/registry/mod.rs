@@ -184,9 +184,13 @@ pub fn info(paths: &Paths, name: &str) -> Result<()> {
 /// `relay export` — write the current config as YAML.
 ///
 /// With `output = None`, prints to stdout. With `output = Some(path)`,
-/// writes to that file. The YAML format is the same as the on-disk
-/// `~/.relay/config.yaml` so `relay import` on another machine can
-/// re-ingest it directly.
+/// writes to that file. If the path has no extension a `.yaml` suffix
+/// is appended automatically — `relay export -o backup` writes to
+/// `backup.yaml`. Existing extensions (e.g. `.yml`, `.json`) are left
+/// alone so users can roll their own conventions.
+///
+/// The YAML format is the same as the on-disk `~/.relay/config.yaml` so
+/// `relay import` on another machine can re-ingest it directly.
 pub fn export(paths: &Paths, output: Option<&std::path::Path>) -> Result<()> {
     let config = config::load(paths)?;
     let yaml = serde_yaml::to_string(&config).map_err(|source| RelayError::ConfigParse {
@@ -199,14 +203,29 @@ pub fn export(paths: &Paths, output: Option<&std::path::Path>) -> Result<()> {
             print!("{yaml}");
         }
         Some(path) => {
-            fs::write(path, &yaml).map_err(|source| RelayError::Io {
-                path: path.to_path_buf(),
+            let target = ensure_yaml_extension(path);
+            fs::write(&target, &yaml).map_err(|source| RelayError::Io {
+                path: target.clone(),
                 source,
             })?;
-            println!("exported {} command(s) to {}", config.commands.len(), path.display());
+            println!(
+                "exported {} command(s) to {}",
+                config.commands.len(),
+                target.display()
+            );
         }
     }
     Ok(())
+}
+
+/// Append `.yaml` to `path` if it has no extension. Returns the path
+/// unchanged when an extension is already present.
+fn ensure_yaml_extension(path: &std::path::Path) -> std::path::PathBuf {
+    if path.extension().is_none() {
+        path.with_extension("yaml")
+    } else {
+        path.to_path_buf()
+    }
 }
 
 /// `relay import <file>` — merge a YAML config from a file into the local

@@ -216,6 +216,33 @@ fn config_yaml_roundtrip() {
 }
 
 #[test]
+fn export_appends_yaml_extension_when_missing() {
+    let (tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+    registry::add(&paths, "c", "cargo", &[]).unwrap();
+
+    // No extension on the export target — should become `.yaml`.
+    let bare = tmp.path().join("backup");
+    registry::export(&paths, Some(&bare)).unwrap();
+
+    assert!(!bare.exists(), "bare 'backup' should not exist");
+    let yaml_path = tmp.path().join("backup.yaml");
+    assert!(
+        yaml_path.exists(),
+        "expected backup.yaml to exist after export"
+    );
+
+    // An explicit extension should be left alone.
+    let custom = tmp.path().join("custom.json");
+    registry::export(&paths, Some(&custom)).unwrap();
+    assert!(custom.exists(), "custom.json should be written verbatim");
+    assert!(
+        !tmp.path().join("custom.json.yaml").exists(),
+        ".yaml should not be appended when an extension is present"
+    );
+}
+
+#[test]
 fn export_and_import_roundtrip() {
     let (tmp_a, paths_a) = tmp_paths();
     let (_tmp_b, paths_b) = tmp_paths();
