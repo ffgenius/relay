@@ -25,8 +25,7 @@ $ProgressPreference = "SilentlyContinue"  # speeds up Invoke-WebRequest
 # ── Configuration ──────────────────────────────────────────────────────────
 
 $Repo    = "ffgenius/relay"
-$Home    = $env:USERPROFILE
-$BinDir  = "$Home\.relay\bin"
+$BinDir  = "$env:USERPROFILE\.relay\bin"
 $BinName = "relay.exe"
 
 # ---- helpers -------------------------------------------------------------
