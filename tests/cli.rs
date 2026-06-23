@@ -38,8 +38,8 @@ fn doctor_subcommand_is_known() {
 }
 
 #[test]
-fn rebuild_shims_subcommand_is_known() {
-    relay().args(["rebuild-shims", "--help"]).assert().success();
+fn rebuild_subcommand_is_known() {
+    relay().args(["rebuild", "--help"]).assert().success();
 }
 
 #[test]

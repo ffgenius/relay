@@ -86,6 +86,37 @@ pub fn link(paths: &Paths, gist_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// `relay sync unlink` — forget the Gist link on this machine.
+///
+/// Removes `~/.relay/sync-state.yaml` so `relay sync push/pull` will
+/// refuse to run until the machine is re-linked. **Does not** delete
+/// the remote Gist — that's intentional, the Gist still works as a
+/// backup and can be re-linked any time via `relay sync link <id>`.
+pub fn unlink(paths: &Paths) -> Result<()> {
+    let path = sync_state_path(paths);
+    if !path.exists() {
+        println!("sync: not configured — nothing to unlink");
+        return Ok(());
+    }
+
+    // Read the existing state so we can print a helpful confirmation
+    // showing what was unlinked.
+    let state = load_sync_state(paths)?;
+
+    fs::remove_file(&path).map_err(|source| RelayError::Io {
+        path: path.clone(),
+        source,
+    })?;
+
+    println!("✔ Unlinked from Gist {}", state.gist_id);
+    println!(
+        "  The Gist still exists at https://gist.github.com/{}",
+        state.gist_id
+    );
+    println!("  Re-link any time with `relay sync link {}`.", state.gist_id);
+    Ok(())
+}
+
 /// `relay sync push` — upload local config to the configured Gist.
 pub fn push(paths: &Paths) -> Result<()> {
     check_gh()?;

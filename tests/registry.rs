@@ -216,6 +216,26 @@ fn config_yaml_roundtrip() {
 }
 
 #[test]
+fn clear_with_yes_removes_all() {
+    let (_tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+    registry::add(&paths, "c", "cargo", &[]).unwrap();
+    registry::add(&paths, "cb", "cargo", &["build".to_string()]).unwrap();
+    assert_eq!(config::load(&paths).unwrap().commands.len(), 2);
+
+    registry::clear(&paths, true).unwrap();
+    assert_eq!(config::load(&paths).unwrap().commands.len(), 0);
+}
+
+#[test]
+fn clear_on_empty_is_noop() {
+    let (_tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+    // Should not error even though there's nothing to clear.
+    registry::clear(&paths, true).unwrap();
+}
+
+#[test]
 fn export_appends_yaml_extension_when_missing() {
     let (tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();

@@ -113,6 +113,8 @@ Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **e
 | `relay update <name> <program> [args...]` | Replace an existing alias |
 | `relay list` (alias: `ls`) | List all aliases by name |
 | `relay info <name>` | Show details for one alias |
+| `relay clear` (alias: `cls`) | Remove every alias (asks for confirmation) |
+| `relay clear --yes` | Same, no confirmation |
 
 ### Discovery
 
@@ -131,6 +133,7 @@ Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **e
 | `relay import <file> --overwrite` | Merge another config (existing aliases overwritten) |
 | `relay sync init` | Create a private GitHub Gist and link this machine to it |
 | `relay sync link <gist_id>` | Link this machine to an existing Gist |
+| `relay sync unlink` | Forget the linked Gist on this machine (remote Gist is kept) |
 | `relay sync push` | Upload local config to the linked Gist |
 | `relay sync pull` | Download config from the Gist (overwrites local) |
 | `relay sync status` | Show whether sync is configured and clean/dirty |
@@ -141,7 +144,7 @@ Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **e
 |---|---|
 | `relay doctor` | Validate PATH, shims, config |
 | `relay doctor --fix` | Re-generate missing shims and auto-add PATH entries |
-| `relay rebuild-shims` | Full reset: regenerate every shim from the current config |
+| `relay rebuild` | Full reset: regenerate every shim from the current config |
 
 ---
 
@@ -213,7 +216,7 @@ Everything lives in `~/.relay/`:
     └── ...
 ```
 
-`config.yaml` is intentionally readable and hand-editable (re-run `relay rebuild-shims` after manual edits):
+`config.yaml` is intentionally readable and hand-editable (re-run `relay rebuild` after manual edits):
 
 ```yaml
 version: 1

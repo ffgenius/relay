@@ -50,9 +50,7 @@ pub fn init(paths: &Paths) -> Result<()> {
             println!("[ok ]  shim dir already on PATH");
         }
         InstallOutcome::Installed => {
-            println!(
-                "[ok ]  shim dir added to PATH — open a new terminal for it to take effect"
-            );
+            println!("[ok ]  shim dir added to PATH — open a new terminal for it to take effect");
         }
         InstallOutcome::Unsupported(reason) | InstallOutcome::Failed(reason) => {
             println!("[warn] could not auto-update PATH: {reason}");
@@ -117,6 +115,39 @@ pub fn remove(paths: &Paths, name: &str) -> Result<()> {
     }
     config::save(paths, &config)?;
     println!("removed {name}");
+    Ok(())
+}
+
+/// `relay clear` — remove **every** registered alias.
+///
+/// Asks for interactive confirmation by default; `auto_yes = true` (from
+/// `--yes`) skips the prompt for scripted use. After clearing, the central
+/// dispatch path calls `shim::sync`, which will then delete every shim
+/// in `~/.relay/bin/` since no commands reference them anymore.
+pub fn clear(paths: &Paths, auto_yes: bool) -> Result<()> {
+    let mut config = config::load(paths)?;
+    let count = config.commands.len();
+    if count == 0 {
+        println!("(no commands registered)");
+        return Ok(());
+    }
+
+    if !auto_yes {
+        use std::io::{BufRead, Write};
+        print!("This will remove all {count} aliases. Continue? [Y/N] ");
+        std::io::stdout().flush().ok();
+        let mut line = String::new();
+        std::io::stdin().lock().read_line(&mut line).ok();
+        let trimmed = line.trim().to_lowercase();
+        if trimmed != "y" && trimmed != "yes" {
+            println!("cancelled.");
+            return Ok(());
+        }
+    }
+
+    config.commands.clear();
+    config::save(paths, &config)?;
+    println!("cleared {count} alias(es)");
     Ok(())
 }
 

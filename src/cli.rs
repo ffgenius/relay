@@ -82,7 +82,15 @@ pub enum Command {
 
     /// Regenerate all shims from the current config. Shims are normally kept
     /// in sync automatically — this is an explicit bulk-reset command.
-    RebuildShims,
+    Rebuild,
+
+    /// Remove every registered alias. Asks for confirmation unless `--yes`.
+    #[command(visible_aliases = ["cls"])]
+    Clear {
+        /// Skip the confirmation prompt.
+        #[arg(short, long)]
+        yes: bool,
+    },
 
     /// Execute a registered command. Invoked by the generated shims.
     #[command(hide = true, disable_help_flag = true, disable_version_flag = true)]
@@ -130,6 +138,9 @@ pub enum SyncAction {
         /// The Gist ID (the hex string in the URL).
         gist_id: String,
     },
+    /// Forget the linked Gist on this machine. Does not delete the Gist
+    /// itself — it stays on GitHub, ready to be re-linked later.
+    Unlink,
 }
 
 /// Entry point used by `main.rs` and by integration tests.
@@ -168,11 +179,12 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         Command::Info { name } => registry::info(&paths, name)?,
         Command::Discover { program } => discover::run(&paths, program.as_deref())?,
         Command::Doctor { fix } => doctor::run(&paths, *fix)?,
-        Command::RebuildShims => {
+        Command::Rebuild => {
             let config = config::load(&paths)?;
             shim::sync(&paths, &config)?;
             println!("shims regenerated");
         }
+        Command::Clear { yes } => registry::clear(&paths, *yes)?,
         Command::Run { name, args } => runner::run(&paths, name, args)?,
         Command::Export { output } => registry::export(&paths, output.as_deref())?,
         Command::Import { file, overwrite } => {
@@ -184,11 +196,12 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
             SyncAction::Pull => sync::pull(&paths)?,
             SyncAction::Status => sync::status(&paths)?,
             SyncAction::Link { gist_id } => sync::link(&paths, gist_id)?,
+            SyncAction::Unlink => sync::unlink(&paths)?,
         },
     }
 
     // Keep shims in sync after every mutation, but not for Run/Doctor/Export/Sync status.
-    // RebuildShims and sync::pull already call sync, so skip them there too.
+    // Rebuild, Clear and sync::pull already call sync, so skip them there too.
     let should_sync = matches!(
         command,
         Command::Init

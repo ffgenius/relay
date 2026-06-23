@@ -111,6 +111,8 @@ vd         # → vite dev（永远）
 | `relay update <name> <program> [args...]` | 修改已有的简写 |
 | `relay list`（别名 `ls`） | 列出所有简写（按名字排序） |
 | `relay info <name>` | 查看单个简写的详情 |
+| `relay clear`（别名 `cls`） | 删除所有简写（会先确认） |
+| `relay clear --yes` | 同上，但不确认 |
 
 ### 查询
 
@@ -129,6 +131,7 @@ vd         # → vite dev（永远）
 | `relay import <file> --overwrite` | 从文件合并配置（冲突时覆盖本地） |
 | `relay sync init` | 创建私密 GitHub Gist 并把本机绑定上去 |
 | `relay sync link <gist_id>` | 把本机绑定到已有的 Gist |
+| `relay sync unlink` | 取消本机的 Gist 绑定（远端 Gist 不会被删） |
 | `relay sync push` | 上传本地配置到 Gist |
 | `relay sync pull` | 从 Gist 下载配置（会覆盖本地） |
 | `relay sync status` | 查看同步是否配置、是否有未推送的变更 |
@@ -139,7 +142,7 @@ vd         # → vite dev（永远）
 |---|---|
 | `relay doctor` | 检查 PATH / shim / 配置完整性 |
 | `relay doctor --fix` | 自动重建缺失的 shim 并加入 PATH |
-| `relay rebuild-shims` | 全量重置：根据当前配置重新生成所有 shim |
+| `relay rebuild` | 全量重置：根据当前配置重新生成所有 shim |
 
 ---
 
@@ -211,7 +214,7 @@ Relay 的卖点就是 **构造性安全** —— 跑 `v dev` 必须和直接跑 
     └── ...
 ```
 
-`config.yaml` 是可读可手改的（手改后记得跑 `relay rebuild-shims` 重建 shim）：
+`config.yaml` 是可读可手改的（手改后记得跑 `relay rebuild` 重建 shim）：
 
 ```yaml
 version: 1
