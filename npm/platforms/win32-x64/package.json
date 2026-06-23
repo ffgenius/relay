@@ -1,6 +1,6 @@
 {
   "name": "@ffgenius/relay-win32-x64",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "description": "win32-x64 binary for @ffgenius/relay",
   "license": "MIT",
   "repository": {

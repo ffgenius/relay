@@ -22,7 +22,7 @@
 class Relay < Formula
   desc "Secure cross-platform command router"
   homepage "https://github.com/ffgenius/relay"
-  version "0.0.6"
+  version "0.1.0"
   license "MIT"
 
   # NOTE: replace the sha256 placeholders below with the actual checksums
@@ -30,22 +30,22 @@ class Relay < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/ffgenius/relay/releases/download/v0.0.6/relay-0.0.6-darwin-arm64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-darwin-arm64.tar.gz"
       sha256 "REPLACE_WITH_ACTUAL_SHA256"
     end
     on_intel do
-      url "https://github.com/ffgenius/relay/releases/download/v0.0.6/relay-0.0.6-darwin-x64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-darwin-x64.tar.gz"
       sha256 "REPLACE_WITH_ACTUAL_SHA256"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/ffgenius/relay/releases/download/v0.0.6/relay-0.0.6-linux-arm64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-linux-arm64.tar.gz"
       sha256 "REPLACE_WITH_ACTUAL_SHA256"
     end
     on_intel do
-      url "https://github.com/ffgenius/relay/releases/download/v0.0.6/relay-0.0.6-linux-x64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-linux-x64.tar.gz"
       sha256 "REPLACE_WITH_ACTUAL_SHA256"
     end
   end
