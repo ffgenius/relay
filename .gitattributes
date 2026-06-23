@@ -1,0 +1,5 @@
+# Shell scripts must use LF line endings — even on Windows checkouts —
+# otherwise piping them to `sh` after downloading from raw.githubusercontent.com
+# will fail.
+*.sh      text eol=lf
+*.ps1     text eol=crlf

@@ -145,3 +145,69 @@ jobs:
           # renders the same content as the GitHub README.
           cp README.md npm/relay/README.md
           npm publish ./npm/relay --access public
+
+  # ── GitHub Release ─────────────────────────────────────────────────────
+  #
+  # Creates a GitHub Release with per-platform archives attached.
+  # These archives are used by:
+  #   - install.sh  (curl / wget pipe-to-shell)
+  #   - install.ps1 (PowerShell irm | iex)
+  #   - Homebrew    (ffgenius/tap formula)
+  #
+  # Archives follow the convention:
+  #   relay-<version>-<platform>-<arch>.tar.gz   (Unix)
+  #   relay-<version>-<platform>-<arch>.zip      (Windows)
+  #
+  # Each archive contains a single top-level directory with the binary
+  # inside, e.g.:
+  #   relay-0.0.6-linux-x64/
+  #     relay
+  create-github-release:
+    name: create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+
+      - name: create per-platform archives
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+
+          echo "::group::packaging archives for $TAG (version $VERSION)"
+
+          for plat_arch in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            dir="relay-${VERSION}-${plat_arch}"
+            mkdir -p "$dir"
+            cp "dist/relay-${plat_arch}/relay" "$dir/relay"
+            chmod +x "$dir/relay"
+            tar -czf "relay-${VERSION}-${plat_arch}.tar.gz" "$dir"
+            echo "  → relay-${VERSION}-${plat_arch}.tar.gz"
+            # Compute sha256 for Homebrew formula generation (printed to
+            # the build log so it can be copied into the formula).
+            sha256sum "relay-${VERSION}-${plat_arch}.tar.gz"
+          done
+
+          for plat_arch in win32-x64 win32-arm64; do
+            dir="relay-${VERSION}-${plat_arch}"
+            mkdir -p "$dir"
+            cp "dist/relay-${plat_arch}/relay.exe" "$dir/relay.exe"
+            zip -r "relay-${VERSION}-${plat_arch}.zip" "$dir"
+            echo "  → relay-${VERSION}-${plat_arch}.zip"
+            sha256sum "relay-${VERSION}-${plat_arch}.zip"
+          done
+
+          echo "::endgroup::"
+
+      - name: create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }}"
+          files: |
+            relay-*.tar.gz
+            relay-*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true

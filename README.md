@@ -3,6 +3,7 @@
 > **Secure cross-platform command router.** Type `v dev`, run `vite dev`. Without shell aliases. Without surprises.
 
 [![npm](https://img.shields.io/npm/v/@ffgenius/relay.svg)](https://www.npmjs.com/package/@ffgenius/relay)
+[![homebrew](https://img.shields.io/badge/homebrew-ffgenius%2Ftap-orange.svg)](https://github.com/ffgenius/homebrew-tap)
 [![license](https://img.shields.io/npm/l/@ffgenius/relay.svg)](./LICENSE)
 
 [中文文档](./README.zh.md)
@@ -31,19 +32,65 @@ Same syntax on Linux, macOS, and Windows. Same config file. Same behaviour.
 
 ## Install
 
+Pick the method that fits your workflow — **no Node.js required** for Homebrew or the shell installer.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap ffgenius/tap
+brew install relay
+relay init
+```
+
+[Homebrew](https://brew.sh) installs the binary and keeps it up to date with `brew upgrade`.
+
+### Shell installer (curl / wget)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ffgenius/relay/master/install.sh | sh
+```
+
+Or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/ffgenius/relay/master/install.sh | sh
+```
+
+The script detects your OS and architecture, downloads the right binary from
+GitHub Releases, installs it to `~/.relay/bin/`, and runs `relay init` for
+automatic shell integration (bash / zsh / fish).
+
+**Options:** `--version 0.0.6` to pin a version; `--no-init` to skip
+shell-profile changes.
+
+### PowerShell (Windows)
+
+```powershell
+irm https://raw.githubusercontent.com/ffgenius/relay/master/install.ps1 | iex
+```
+
+Same behaviour as the shell installer: downloads the right binary, installs to
+`~\.relay\bin\`, and adds it to your user `PATH` via the registry.
+
+**Options:** `-Version 0.0.6` to pin a version; `-NoInit` to skip PATH setup.
+
+### npm
+
 ```bash
 npm install -g @ffgenius/relay
 ```
 
-The npm package selects the right binary for your platform automatically (`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`, `win32-arm64`).
+The npm package selects the right binary for your platform automatically
+(`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`,
+`win32-arm64`).
 
-After install, run:
+### After install
 
-```bash
-relay init
-```
+All methods above run `relay init` for you (unless you opt out). This creates
+`~/.relay/` and adds `~/.relay/bin` to your `PATH`.
 
-This creates `~/.relay/` and adds `~/.relay/bin` to your `PATH`. **Open a new terminal** for the PATH change to take effect.
+**Open a new terminal** for the PATH change to take effect — then you're ready
+to go.
 
 ---
 
