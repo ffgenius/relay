@@ -4,6 +4,9 @@
 #   1. cargo     — Rust crate dependencies.
 #   2. github-actions — CI workflow actions (checkout, rust-cache, …).
 #   3. npm       — npm wrapper & platform packages under npm/.
+#
+# Major-version bumps are ignored for every ecosystem: they usually carry
+# breaking changes and we'd rather upgrade them deliberately by hand.
 
 version: 2
 updates:
@@ -13,6 +16,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -20,6 +26,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /npm/relay
@@ -27,3 +36,6 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
