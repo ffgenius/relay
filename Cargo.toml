@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 rust-version = "1.75"
 description = "Secure cross-platform command router"
@@ -28,6 +28,7 @@ thiserror = "1"
 which = "6"
 
 [target.'cfg(windows)'.dependencies]
+enable-ansi-support = "0.2"
 winreg = "0.52"
 
 [dev-dependencies]
