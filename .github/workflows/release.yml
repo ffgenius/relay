@@ -85,7 +85,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: relay-${{ matrix.platform }}-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/${{ matrix.exe }}
