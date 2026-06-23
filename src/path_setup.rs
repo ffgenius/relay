@@ -49,22 +49,19 @@ fn install_dir(bin_dir: &Path) -> InstallOutcome {
         return InstallOutcome::AlreadyPresent;
     }
 
+    // Each platform branch is its own item so that only the active one is
+    // compiled and we don't trip rust-analyzer's "statement vs. tail expr"
+    // heuristic with three sibling `#[cfg]` blocks.
     #[cfg(windows)]
-    {
-        install_windows(bin_dir)
-    }
+    return install_windows(bin_dir);
 
     #[cfg(unix)]
-    {
-        install_unix(bin_dir)
-    }
+    return install_unix(bin_dir);
 
     #[cfg(not(any(windows, unix)))]
-    {
-        InstallOutcome::Unsupported(
-            "unsupported platform — add the shim dir to your PATH manually".into(),
-        )
-    }
+    return InstallOutcome::Unsupported(
+        "unsupported platform — add the shim dir to your PATH manually".into(),
+    );
 }
 
 /// Does `$PATH` already contain the canonical form of `dir`?
@@ -171,7 +168,7 @@ mod platform {
         if let Err(e) = hkcu.set_raw_value(
             "Path",
             &winreg::RegValue {
-                bytes,
+                bytes: bytes.into(),
                 vtype: reg_type,
             },
         ) {
