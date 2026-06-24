@@ -7,39 +7,47 @@
 #     brew tap ffgenius/tap
 #     brew install relay
 #
-# This file is the SINGLE SOURCE OF TRUTH for the Homebrew formula.
+# This file is the SINGLE SOURCE OF TRUTH for the Homebrew formula. Edit at will.
 # When you push changes to this file, CI automatically syncs it to
-# ffgenius/homebrew-tap, computing sha256 checksums on the fly.
+# ffgenius/homebrew-tap.
 #
-# How to release a new version:
-#   1. Update `version` and the `url` paths below to the new version.
-#   2. Commit and push — CI replaces {{SHA256_*}} placeholders with
-#      real checksums and pushes to the tap repo.
+# {{VERSION}} and {{SHA256_*}} are CI placeholders — do not edit them.
+# The sync workflow reads the real version from Cargo.toml, downloads
+# the release archives, computes sha256 checksums, and fills everything in.
+#
+# To release a new version:
+#   1. Bump `version` in Cargo.toml (and npm package.json files).
+#   2. Push a v*.*.* tag — the release workflow builds and creates a
+#      GitHub Release with per-platform archives.
+#   3. Then commit any change to this file (e.g. touch a comment) and
+#      push — the sync workflow resolves {{VERSION}} from Cargo.toml and
+#      {{SHA256_*}} from the release archives, and pushes the completed
+#      formula to ffgenius/homebrew-tap.
 # ---------------------------------------------------------------------------
 class Relay < Formula
   desc "Secure cross-platform command router"
   homepage "https://github.com/ffgenius/relay"
-  version "0.1.0"
+  version "{{VERSION}}"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-darwin-arm64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v{{VERSION}}/relay-{{VERSION}}-darwin-arm64.tar.gz"
       sha256 "{{SHA256_DARWIN_ARM64}}"
     end
     on_intel do
-      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-darwin-x64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v{{VERSION}}/relay-{{VERSION}}-darwin-x64.tar.gz"
       sha256 "{{SHA256_DARWIN_X64}}"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-linux-arm64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v{{VERSION}}/relay-{{VERSION}}-linux-arm64.tar.gz"
       sha256 "{{SHA256_LINUX_ARM64}}"
     end
     on_intel do
-      url "https://github.com/ffgenius/relay/releases/download/v0.1.0/relay-0.1.0-linux-x64.tar.gz"
+      url "https://github.com/ffgenius/relay/releases/download/v{{VERSION}}/relay-{{VERSION}}-linux-x64.tar.gz"
       sha256 "{{SHA256_LINUX_X64}}"
     end
   end
