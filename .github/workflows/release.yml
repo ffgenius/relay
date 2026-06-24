@@ -171,6 +171,8 @@ jobs:
         with:
           path: dist
 
+      - uses: actions/checkout@v7
+
       - name: create per-platform archives
         run: |
           set -euo pipefail
@@ -179,6 +181,10 @@ jobs:
 
           echo "::group::packaging archives for $TAG (version $VERSION)"
 
+          # Write sha256 hashes in shell-var format for the formula sync step.
+          SHA256_FILE="sha256.env"
+          > "$SHA256_FILE"
+
           for plat_arch in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
             dir="relay-${VERSION}-${plat_arch}"
             mkdir -p "$dir"
@@ -186,9 +192,9 @@ jobs:
             chmod +x "$dir/relay"
             tar -czf "relay-${VERSION}-${plat_arch}.tar.gz" "$dir"
             echo "  → relay-${VERSION}-${plat_arch}.tar.gz"
-            # Compute sha256 for Homebrew formula generation (printed to
-            # the build log so it can be copied into the formula).
-            sha256sum "relay-${VERSION}-${plat_arch}.tar.gz"
+            HASH="$(sha256sum "relay-${VERSION}-${plat_arch}.tar.gz" | cut -d' ' -f1)"
+            echo "SHA256_$(echo "${plat_arch}" | tr 'a-z-' 'A-Z_')=${HASH}" >> "$SHA256_FILE"
+            echo "    sha256: ${HASH}"
           done
 
           for plat_arch in win32-x64 win32-arm64; do
@@ -197,10 +203,16 @@ jobs:
             cp "dist/relay-${plat_arch}/relay.exe" "$dir/relay.exe"
             zip -r "relay-${VERSION}-${plat_arch}.zip" "$dir"
             echo "  → relay-${VERSION}-${plat_arch}.zip"
-            sha256sum "relay-${VERSION}-${plat_arch}.zip"
+            HASH="$(sha256sum "relay-${VERSION}-${plat_arch}.zip" | cut -d' ' -f1)"
+            echo "SHA256_$(echo "${plat_arch}" | tr 'a-z-' 'A-Z_')=${HASH}" >> "$SHA256_FILE"
+            echo "    sha256: ${HASH}"
           done
 
+          echo "VERSION=${VERSION}" >> "$SHA256_FILE"
           echo "::endgroup::"
+
+          # Persist for the formula sync step.
+          cat "$SHA256_FILE" >> "$GITHUB_ENV"
 
       - name: create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -211,3 +223,59 @@ jobs:
             relay-*.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
+
+      # ── Sync Homebrew formula ──────────────────────────────────────────
+      #
+      # Clones ffgenius/homebrew-tap, copies the formula template from the
+      # relay repo, replaces {{VERSION}} and {{SHA256_*}} placeholders with
+      # computed values, then commits and pushes.
+      #
+      # Requires secret: HOMEBREW_TAP_TOKEN — a GitHub PAT with write
+      # permission on ffgenius/homebrew-tap.
+      - name: sync Homebrew formula to ffgenius/homebrew-tap
+        env:
+          TAP_REPO: ffgenius/homebrew-tap
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set — skipping formula sync"
+            exit 0
+          fi
+          set -euo pipefail
+          echo "::group::syncing formula to ${TAP_REPO}"
+
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" /tmp/tap
+          mkdir -p /tmp/tap/Formula
+
+          cp pkg/brew/relay.rb /tmp/tap/Formula/relay.rb
+          cd /tmp/tap
+
+          # Replace version placeholder.
+          sed -i "s/{{VERSION}}/${VERSION}/g" Formula/relay.rb
+
+          # Replace sha256 placeholders with computed values.
+          sed -i "s/{{SHA256_LINUX_X64}}/${SHA256_LINUX_X64}/g"      Formula/relay.rb
+          sed -i "s/{{SHA256_LINUX_ARM64}}/${SHA256_LINUX_ARM64}/g"   Formula/relay.rb
+          sed -i "s/{{SHA256_DARWIN_X64}}/${SHA256_DARWIN_X64}/g"     Formula/relay.rb
+          sed -i "s/{{SHA256_DARWIN_ARM64}}/${SHA256_DARWIN_ARM64}/g" Formula/relay.rb
+
+          # Verify no unreplaced placeholders remain.
+          if grep -n '{{' Formula/relay.rb; then
+            echo "::error:: unreplaced placeholders in formula!"
+            exit 1
+          fi
+
+          # Commit and push only if changed.
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "formula unchanged — nothing to push"
+          else
+            git add Formula/relay.rb
+            git commit -m "relay ${TAG}"
+            git push
+            echo "pushed formula update for ${TAG}"
+          fi
+
+          echo "::endgroup::"
