@@ -3,11 +3,11 @@
 # Trigger: push to master that touches pkg/brew/relay.rb.
 #
 # The formula in pkg/brew/relay.rb is the single source of truth.
-# You update `version` and the URL paths. This workflow:
-#   1. Parses the version from the formula.
+# This workflow:
+#   1. Reads the real version from Cargo.toml.
 #   2. Downloads the release archives from GitHub Releases.
 #   3. Computes sha256 checksums.
-#   4. Replaces {{SHA256_*}} placeholders with real values.
+#   4. Replaces {{VERSION}} and {{SHA256_*}} placeholders with real values.
 #   5. Pushes the completed formula to ffgenius/homebrew-tap.
 #
 # Required secret:
@@ -41,10 +41,10 @@ jobs:
           fi
           set -euo pipefail
 
-          # ── Parse version from the formula ──────────────────────────
-          VERSION=$(grep -oP 'version "\K[^"]+' pkg/brew/relay.rb)
+          # ── Read version from Cargo.toml ────────────────────────────
+          VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' Cargo.toml)
           if [ -z "${VERSION}" ]; then
-            echo "::error:: could not parse version from pkg/brew/relay.rb"
+            echo "::error:: could not parse version from Cargo.toml"
             exit 1
           fi
           TAG="v${VERSION}"
@@ -76,6 +76,9 @@ jobs:
 
           cp pkg/brew/relay.rb /tmp/tap/Formula/relay.rb
           cd /tmp/tap
+
+          # Replace version placeholder.
+          sed -i "s|{{VERSION}}|${VERSION}|g" Formula/relay.rb
 
           # Replace sha256 placeholders.
           for VARNAME in "${!SHA256[@]}"; do
