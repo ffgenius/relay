@@ -7,7 +7,7 @@
 #     brew tap ffgenius/tap
 #     brew install relay
 #
-# This file is the SINGLE SOURCE OF TRUTH for the Homebrew formula. Edit at will.
+# This file is the SINGLE SOURCE OF TRUTH for the Homebrew formula. Edit at will, CI handles the rest.
 # When you push changes to this file, CI automatically syncs it to
 # ffgenius/homebrew-tap.
 #
