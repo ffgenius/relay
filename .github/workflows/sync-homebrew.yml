@@ -2,9 +2,13 @@
 #
 # Trigger: push to master that touches pkg/brew/relay.rb.
 #
-# Copies the formula verbatim to the tap repo. Edit pkg/brew/relay.rb
-# with the actual version and sha256 values — CI does no placeholder
-# replacement. The file is the single source of truth.
+# The formula in pkg/brew/relay.rb is the single source of truth.
+# You update `version` and the URL paths. This workflow:
+#   1. Parses the version from the formula.
+#   2. Downloads the release archives from GitHub Releases.
+#   3. Computes sha256 checksums.
+#   4. Replaces {{SHA256_*}} placeholders with real values.
+#   5. Pushes the completed formula to ffgenius/homebrew-tap.
 #
 # Required secret:
 #   HOMEBREW_TAP_TOKEN — GitHub PAT with write permission on
@@ -37,14 +41,54 @@ jobs:
           fi
           set -euo pipefail
 
-          echo "::group::syncing formula to ${TAP_REPO}"
+          # ── Parse version from the formula ──────────────────────────
+          VERSION=$(grep -oP 'version "\K[^"]+' pkg/brew/relay.rb)
+          if [ -z "${VERSION}" ]; then
+            echo "::error:: could not parse version from pkg/brew/relay.rb"
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          echo "version: ${VERSION}  (tag: ${TAG})"
 
+          # ── Compute sha256 for each platform archive ────────────────
+          echo "::group::computing sha256 checksums"
+          declare -A SHA256
+
+          for plat_arch in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            ARCHIVE="relay-${VERSION}-${plat_arch}.tar.gz"
+            URL="https://github.com/ffgenius/relay/releases/download/${TAG}/${ARCHIVE}"
+            echo "  downloading ${ARCHIVE}…"
+            HASH=$(curl -fsSL "${URL}" | sha256sum | cut -d' ' -f1)
+            if [ -z "${HASH}" ]; then
+              echo "::error:: failed to download or checksum ${URL}"
+              exit 1
+            fi
+            VARNAME="SHA256_$(echo "${plat_arch}" | tr 'a-z-' 'A-Z_')"
+            SHA256["${VARNAME}"]="${HASH}"
+            echo "  ${VARNAME}=${HASH}"
+          done
+          echo "::endgroup::"
+
+          # ── Clone tap repo, apply formula, push ────────────────────
+          echo "::group::syncing to ${TAP_REPO}"
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" /tmp/tap
           mkdir -p /tmp/tap/Formula
 
           cp pkg/brew/relay.rb /tmp/tap/Formula/relay.rb
           cd /tmp/tap
 
+          # Replace sha256 placeholders.
+          for VARNAME in "${!SHA256[@]}"; do
+            sed -i "s|{{${VARNAME}}}|${SHA256[${VARNAME}]}|g" Formula/relay.rb
+          done
+
+          # Verify no unreplaced placeholders remain.
+          if grep -n '{{' Formula/relay.rb; then
+            echo "::error:: unreplaced placeholders in formula"
+            exit 1
+          fi
+
+          # Commit and push.
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -52,9 +96,8 @@ jobs:
             echo "formula unchanged — nothing to push"
           else
             git add Formula/relay.rb
-            git commit -m "sync: relay formula from relay@${GITHUB_SHA::7}"
+            git commit -m "relay ${TAG}"
             git push
-            echo "::notice:: pushed formula update to ${TAP_REPO}"
+            echo "::notice:: pushed formula update for ${TAG} to ${TAP_REPO}"
           fi
-
           echo "::endgroup::"
