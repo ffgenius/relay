@@ -11,7 +11,7 @@
 # When you push changes to this file, CI automatically syncs it to
 # ffgenius/homebrew-tap.
 #
-# {{VERSION}} and {{SHA256_*}} are CI placeholders — do not edit them.
+# VERSION and SHA256_* are CI placeholders — do not edit them.
 # The sync workflow reads the real version from Cargo.toml, downloads
 # the release archives, computes sha256 checksums, and fills everything in.
 #
@@ -20,8 +20,8 @@
 #   2. Push a v*.*.* tag — the release workflow builds and creates a
 #      GitHub Release with per-platform archives.
 #   3. Then commit any change to this file (e.g. touch a comment) and
-#      push — the sync workflow resolves {{VERSION}} from Cargo.toml and
-#      {{SHA256_*}} from the release archives, and pushes the completed
+#      push — the sync workflow resolves VERSION from Cargo.toml and
+#      SHA256_* from the release archives, and pushes the completed
 #      formula to ffgenius/homebrew-tap.
 # ---------------------------------------------------------------------------
 class Relay < Formula
