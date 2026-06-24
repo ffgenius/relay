@@ -1,0 +1,60 @@
+# Sync Homebrew formula to ffgenius/homebrew-tap
+#
+# Trigger: push to master that touches pkg/brew/relay.rb.
+#
+# Copies the formula verbatim to the tap repo. Edit pkg/brew/relay.rb
+# with the actual version and sha256 values — CI does no placeholder
+# replacement. The file is the single source of truth.
+#
+# Required secret:
+#   HOMEBREW_TAP_TOKEN — GitHub PAT with write permission on
+#   ffgenius/homebrew-tap (only needs public_repo scope).
+
+name: sync-homebrew
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - pkg/brew/relay.rb
+
+jobs:
+  sync:
+    name: sync to ffgenius/homebrew-tap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: push formula to tap repo
+        env:
+          TAP_REPO: ffgenius/homebrew-tap
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::error:: HOMEBREW_TAP_TOKEN secret is not set"
+            exit 1
+          fi
+          set -euo pipefail
+
+          echo "::group::syncing formula to ${TAP_REPO}"
+
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" /tmp/tap
+          mkdir -p /tmp/tap/Formula
+
+          cp pkg/brew/relay.rb /tmp/tap/Formula/relay.rb
+          cd /tmp/tap
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "formula unchanged — nothing to push"
+          else
+            git add Formula/relay.rb
+            git commit -m "sync: relay formula from relay@${GITHUB_SHA::7}"
+            git push
+            echo "::notice:: pushed formula update to ${TAP_REPO}"
+          fi
+
+          echo "::endgroup::"
