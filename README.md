@@ -113,6 +113,10 @@ relay list            # all aliases (also: relay ls)
 relay info v          # details for one alias
 relay discover vite   # aliases grouped by target program
 
+# Store and run shell snippets (with cross-shell auto-translation).
+relay snippet add goback "cd ../"
+relay snippet run goback --dry-run
+
 # Diagnose.
 relay doctor          # check PATH, shims, config
 relay doctor --fix    # auto-repair missing shims and PATH entries
@@ -122,7 +126,7 @@ relay doctor --fix    # auto-repair missing shims and PATH entries
 
 ## Concepts
 
-Relay has two kinds of aliases:
+Relay has three kinds of items:
 
 ### Prefix alias
 
@@ -145,6 +149,24 @@ vd         # → vite dev (always)
 ```
 
 Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **exact** for one-liners you run all the time (`vd`, `gp`, `nci`).
+
+### Snippet
+
+`relay snippet add <name> <content...>` — store an arbitrary shell code fragment. Unlike regular aliases (which bypass the shell), snippets are executed through a shell interpreter and support **automatic cross-shell translation** via [polysh](https://github.com/ffgenius/polysh).
+
+```bash
+# Create a snippet — relay auto-detects your current shell.
+relay snippet add goback "cd ../"
+
+# Run it — if your current shell differs from the one it was written in,
+# relay translates the command automatically (Unix ↔ PowerShell ↔ CMD).
+relay snippet run goback
+
+# Preview the translated command without executing.
+relay snippet run goback --dry-run
+```
+
+**Why snippets?** Commands like `cd`, `export`, complex pipes, and shell built-ins can't work through relay's direct-execution model. Snippets fill that gap while keeping cross-shell portability.
 
 ---
 
@@ -174,16 +196,39 @@ Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **e
 
 | Command | Description |
 |---|---|
-| `relay export` | Print config to stdout (YAML) |
+| `relay export` | Print config to stdout (YAML). Includes snippets by default |
 | `relay export -o <file>` | Write to file (`.yaml` auto-appended if missing) |
-| `relay import <file>` | Merge another config (existing aliases preserved) |
-| `relay import <file> --overwrite` | Merge another config (existing aliases overwritten) |
+| `relay export --no-snippet` | Export only commands, exclude snippets |
+| `relay import <file>` | Merge another config. Snippets are **skipped by default** for security |
+| `relay import <file> --overwrite` | Merge, overwriting conflicting aliases |
+| `relay import <file> --allow-snippet` | Also import snippets from the file |
 | `relay sync init` | Create a private GitHub Gist and link this machine to it |
 | `relay sync link <gist_id>` | Link this machine to an existing Gist |
 | `relay sync unlink` | Forget the linked Gist on this machine (remote Gist is kept) |
-| `relay sync push` | Upload local config to the linked Gist |
-| `relay sync pull` | Download config from the Gist (overwrites local) |
-| `relay sync status` | Show whether sync is configured and clean/dirty |
+| `relay sync push` | Upload local config (commands + snippets) to the linked Gist |
+| `relay sync push --no-snippet` | Upload only commands, exclude snippets |
+| `relay sync pull` | Download config from the Gist. Snippets **skipped by default** |
+| `relay sync pull --allow-snippet` | Download and include snippets |
+| `relay sync status` | Show sync status, command and snippet counts |
+
+### Snippets
+
+| Command | Description |
+|---|---|
+| `relay snippet add <name> <content...>` | Create a snippet (auto-detects current shell) |
+| `relay snippet add <name> <content...> --shell <d>` | Create with explicit shell dialect (`unix`, `powershell`, `cmd`) |
+| `relay snippet add <name> <content...> --desc <d>` | Create with a description |
+| `relay snippet remove <name>` (alias: `rm`) | Delete a snippet |
+| `relay snippet list` (alias: `ls`) | List all snippets |
+| `relay snippet info <name>` | Show full details of one snippet |
+| `relay snippet edit <name> --content <c>` | Update a snippet's content |
+| `relay snippet edit <name> --desc <d>` | Update description (pass `""` to clear) |
+| `relay snippet edit <name> --shell <d>` | Change the shell dialect |
+| `relay snippet run <name>` | Execute a snippet (auto-translates to current shell) |
+| `relay snippet run <name> --dry-run` | Print the translated command without executing |
+| `relay snippet run <name> --no-translate` | Run as-is, skip cross-shell translation |
+| `relay snippet clear` | Remove all snippets (asks for confirmation) |
+| `relay snippet clear --yes` | Same, no confirmation |
 
 ### System
 
@@ -233,8 +278,8 @@ relay sync pull               # pull the change
 
 Relay's whole point is to be safe by construction — running `v dev` should be **boringly equivalent** to running `vite dev` directly. The four principles below are enforced at code level:
 
-> **Principle 1 — Relay does not execute a shell.**
-> No `sh -c`, no `cmd /c`, no `powershell -Command`. The runner uses `std::process::Command` to spawn the target binary directly.
+> **Principle 1 — Relay does not execute a shell (except for snippets).**
+> Regular aliases use `std::process::Command` to spawn the target binary directly — no `sh -c`, no `cmd /c`, no `powershell -Command`. **Snippets are the deliberate exception**: since they are shell code by nature, they run through a shell interpreter. This is why import/pull require `--allow-snippet` — snippets are opt-in trusted code.
 
 > **Principle 2 — Relay does not execute strings.**
 > An alias is a `(program, args)` tuple. There is no `exec: "vite dev && rm -rf /"` field. Strings as commands are not a representable state.
@@ -255,7 +300,7 @@ Everything lives in `~/.relay/`:
 
 ```
 ~/.relay/
-├── config.yaml          # registered aliases
+├── config.yaml          # registered aliases + snippets
 ├── sync-state.yaml      # (optional) linked Gist ID + sync hash
 └── bin/                 # generated shims; this dir goes on PATH
     ├── v                # or v.cmd on Windows
@@ -276,6 +321,16 @@ commands:
     program: vite
     args:
       - dev
+snippets:
+  goback:
+    type: snippet
+    content: "cd ../"
+    shell: unix
+  serve:
+    type: snippet
+    content: "python3 -m http.server 8080"
+    shell: unix
+    description: "start a local file server"
 ```
 
 ---
@@ -313,13 +368,9 @@ Run `gh auth login` once. Relay piggybacks on your GitHub CLI session — it nev
 ```bash
 git clone https://github.com/ffgenius/relay
 cd relay
-git config core.hooksPath .githooks   # enable pre-commit auto-format
 cargo build
 cargo test
 ```
-
-The pre-commit hook runs `cargo fmt --all` on staged `.rs` files, so CI's
-fmt check never bites you. Skip with `git commit --no-verify` if needed.
 
 Issues and PRs welcome.
 

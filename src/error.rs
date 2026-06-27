@@ -50,4 +50,20 @@ pub enum RelayError {
 
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+
+    // ── snippet errors ──
+    #[error("snippet `{0}` is not registered")]
+    UnknownSnippet(String),
+
+    #[error("snippet `{0}` is already registered")]
+    SnippetExists(String),
+
+    #[error("name `{0}` is already used by a command")]
+    SnippetNameConflict(String),
+
+    #[error("invalid shell dialect `{0}` — use: unix, powershell, cmd")]
+    InvalidShell(String),
+
+    #[error("snippet translation failed: {0}")]
+    SnippetTranslateError(String),
 }

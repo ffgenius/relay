@@ -215,8 +215,17 @@ pub fn info(paths: &Paths, name: &str) -> Result<()> {
 ///
 /// The YAML format is the same as the on-disk `~/.relay/config.yaml` so
 /// `relay import` on another machine can re-ingest it directly.
-pub fn export(paths: &Paths, output: Option<&std::path::Path>) -> Result<()> {
-    let config = config::load(paths)?;
+///
+/// When `no_snippet` is true, snippets are stripped from the export so
+/// the output only contains commands (backward-compatible with v1).
+pub fn export(paths: &Paths, output: Option<&std::path::Path>, no_snippet: bool) -> Result<()> {
+    let mut config = config::load(paths)?;
+    let snippet_count = config.snippets.len();
+
+    if no_snippet {
+        config.snippets.clear();
+    }
+
     let yaml = serde_yaml::to_string(&config).map_err(|source| RelayError::ConfigParse {
         path: paths.config_file(),
         source,
@@ -232,9 +241,17 @@ pub fn export(paths: &Paths, output: Option<&std::path::Path>) -> Result<()> {
                 path: target.clone(),
                 source,
             })?;
+            let extra = if no_snippet {
+                String::new()
+            } else if snippet_count > 0 {
+                format!(" + {snippet_count} snippet(s)")
+            } else {
+                String::new()
+            };
             ui::ok(format!(
-                "exported {} command(s) to {}",
+                "exported {} command(s){} to {}",
                 config.commands.len(),
+                extra,
                 target.display()
             ));
         }
@@ -255,7 +272,15 @@ fn ensure_yaml_extension(path: &std::path::Path) -> std::path::PathBuf {
 /// `relay import <file>` — merge a YAML config from a file into the local
 /// config. With `overwrite = false`, existing aliases are kept on conflict;
 /// with `overwrite = true`, the imported version wins.
-pub fn import(paths: &Paths, file: &std::path::Path, overwrite: bool) -> Result<()> {
+///
+/// Snippets are **skipped by default** for security (arbitrary shell code
+/// from an external source). Pass `allow_snippet = true` to import them.
+pub fn import(
+    paths: &Paths,
+    file: &std::path::Path,
+    overwrite: bool,
+    allow_snippet: bool,
+) -> Result<()> {
     let bytes = fs::read(file).map_err(|source| RelayError::Io {
         path: file.to_path_buf(),
         source,
@@ -270,6 +295,9 @@ pub fn import(paths: &Paths, file: &std::path::Path, overwrite: bool) -> Result<
     let mut added = 0usize;
     let mut skipped = 0usize;
     let mut overwritten = 0usize;
+    let mut snippet_added = 0usize;
+    let mut snippet_skipped = 0usize;
+    let mut snippet_overwritten = 0usize;
 
     for (name, cmd) in incoming.commands {
         match current.commands.entry(name) {
@@ -288,10 +316,49 @@ pub fn import(paths: &Paths, file: &std::path::Path, overwrite: bool) -> Result<
         }
     }
 
+    let incoming_snippet_count = incoming.snippets.len();
+    if allow_snippet {
+        for (name, snip) in incoming.snippets {
+            // Check for name conflict with commands.
+            if current.commands.contains_key(&name) {
+                snippet_skipped += 1;
+                continue;
+            }
+            match current.snippets.entry(name) {
+                std::collections::btree_map::Entry::Occupied(mut e) => {
+                    if overwrite {
+                        e.insert(snip);
+                        snippet_overwritten += 1;
+                    } else {
+                        snippet_skipped += 1;
+                    }
+                }
+                std::collections::btree_map::Entry::Vacant(e) => {
+                    e.insert(snip);
+                    snippet_added += 1;
+                }
+            }
+        }
+    } else if incoming_snippet_count > 0 {
+        // Snippets present but not allowed — warn.
+    }
+
     config::save(paths, &current)?;
-    ui::ok(format!(
-        "imported: {added} added, {overwritten} overwritten, {skipped} skipped"
-    ));
+
+    let cmd_msg = format!("imported: {added} added, {overwritten} overwritten, {skipped} skipped");
+    if allow_snippet && incoming_snippet_count > 0 {
+        ui::ok(format!(
+            "{cmd_msg} + {snippet_added} snippet(s) added, {snippet_overwritten} overwritten, {snippet_skipped} skipped"
+        ));
+    } else if incoming_snippet_count > 0 {
+        ui::ok(&cmd_msg);
+        ui::warn(format!(
+            "{incoming_snippet_count} snippet(s) skipped. Use --allow-snippet to import them."
+        ));
+    } else {
+        ui::ok(&cmd_msg);
+    }
+
     Ok(())
 }
 

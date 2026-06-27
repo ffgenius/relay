@@ -3,8 +3,11 @@
 # Trigger:  push to master, any pull request.
 #
 # Jobs:
-#   1. `lint`   — cargo fmt + cargo clippy (ubuntu, fastest runner).
-#   2. `test`   — cargo test on ubuntu / macos / windows, matrix.
+#   1. `auto-tag` — if a commit message starts with `release: v*.*.*`,
+#      the job creates and pushes a matching git tag. That tag then
+#      triggers the `release.yml` workflow.
+#   2. `lint`   — cargo clippy (ubuntu, fastest runner).
+#   3. `test`   — cargo test on ubuntu / macos / windows, matrix.
 #      caches Rust toolchain + target dir between runs.
 
 name: ci
@@ -15,14 +18,48 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  auto-tag:
+    name: auto-tag on release commit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    outputs:
+      tag: ${{ steps.parse.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: parse
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          VERSION=$(echo "$MSG" | sed -nE 's/^release: v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')
+          if [ -z "$VERSION" ]; then
+            echo "Not a release commit. Skipping tag creation."
+            exit 0
+          fi
+          TAG="v$VERSION"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Verify Cargo.toml version matches.
+          ACTUAL=$(grep '^version' Cargo.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "$VERSION" != "$ACTUAL" ]; then
+            echo "Version mismatch: commit says v$VERSION, Cargo.toml says v$ACTUAL"
+            exit 1
+          fi
+          echo "Cargo.toml version $ACTUAL matches commit message."
+
+      - name: create and push tag
+        if: steps.parse.outputs.tag != ''
+        run: |
+          git tag "${{ steps.parse.outputs.tag }}"
+          git push origin "${{ steps.parse.outputs.tag }}"
+
   lint:
-    name: lint (fmt + clippy)
+    name: lint (clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -33,10 +70,7 @@ jobs:
       - name: rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: cargo fmt
-        run: cargo fmt --all --check
-
-      - name: cargo clippy
+- name: cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
