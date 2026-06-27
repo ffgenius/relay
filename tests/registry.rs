@@ -207,6 +207,7 @@ fn config_yaml_roundtrip() {
     let cfg = Config {
         version: 1,
         commands: cmds,
+        snippets: BTreeMap::new(),
     };
     config::save(&paths, &cfg).unwrap();
 
@@ -243,7 +244,7 @@ fn export_appends_yaml_extension_when_missing() {
 
     // No extension on the export target — should become `.yaml`.
     let bare = tmp.path().join("backup");
-    registry::export(&paths, Some(&bare)).unwrap();
+    registry::export(&paths, Some(&bare), false).unwrap();
 
     assert!(!bare.exists(), "bare 'backup' should not exist");
     let yaml_path = tmp.path().join("backup.yaml");
@@ -254,7 +255,7 @@ fn export_appends_yaml_extension_when_missing() {
 
     // An explicit extension should be left alone.
     let custom = tmp.path().join("custom.json");
-    registry::export(&paths, Some(&custom)).unwrap();
+    registry::export(&paths, Some(&custom), false).unwrap();
     assert!(custom.exists(), "custom.json should be written verbatim");
     assert!(
         !tmp.path().join("custom.json.yaml").exists(),
@@ -275,11 +276,11 @@ fn export_and_import_roundtrip() {
 
     // Export to a file in tmp_a.
     let export_file = tmp_a.path().join("export.yaml");
-    registry::export(&paths_a, Some(&export_file)).unwrap();
+    registry::export(&paths_a, Some(&export_file), false).unwrap();
     assert!(export_file.exists());
 
     // Import into machine B (empty).
-    registry::import(&paths_b, &export_file, false).unwrap();
+    registry::import(&paths_b, &export_file, false, false).unwrap();
     let cfg_b = config::load(&paths_b).unwrap();
     assert_eq!(cfg_b.commands.len(), 2);
     assert_eq!(cfg_b.commands["c"].program, "cargo");
@@ -300,8 +301,8 @@ fn import_default_skips_existing() {
     registry::add(&paths_b, "c", "cargo", &["build".to_string()]).unwrap();
 
     let export_file = tmp_a.path().join("export.yaml");
-    registry::export(&paths_a, Some(&export_file)).unwrap();
-    registry::import(&paths_b, &export_file, false).unwrap();
+    registry::export(&paths_a, Some(&export_file), false).unwrap();
+    registry::import(&paths_b, &export_file, false, false).unwrap();
 
     // B's `c` is still the exact form with args.
     let cfg_b = config::load(&paths_b).unwrap();
@@ -319,8 +320,8 @@ fn import_overwrite_replaces_existing() {
     registry::add(&paths_b, "c", "cargo", &["build".to_string()]).unwrap();
 
     let export_file = tmp_a.path().join("export.yaml");
-    registry::export(&paths_a, Some(&export_file)).unwrap();
-    registry::import(&paths_b, &export_file, true).unwrap();
+    registry::export(&paths_a, Some(&export_file), false).unwrap();
+    registry::import(&paths_b, &export_file, true, false).unwrap();
 
     // B's `c` was overwritten with A's prefix form (no args).
     let cfg_b = config::load(&paths_b).unwrap();

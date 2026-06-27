@@ -109,6 +109,10 @@ relay list            # 列出所有简写（也可以 relay ls）
 relay info v          # 查看单个简写的详情
 relay discover vite   # 按目标程序聚合查看
 
+# 存储和运行 Shell 片段（支持跨 Shell 自动翻译）
+relay snippet add goback "cd ../"
+relay snippet run goback --dry-run
+
 # 诊断
 relay doctor          # 检查 PATH / shim / 配置
 relay doctor --fix    # 自动修复缺失的 shim 和 PATH
@@ -116,7 +120,7 @@ relay doctor --fix    # 自动修复缺失的 shim 和 PATH
 
 ---
 
-## 两种简写
+## 三种项目类型
 
 ### Prefix 简写
 
@@ -139,6 +143,24 @@ vd         # → vite dev（永远）
 ```
 
 **Prefix** 适合你经常用多个子命令的工具（`v`、`g`、`n`）；**Exact** 适合你天天敲的高频组合（`vd`、`gp`、`nci`）。
+
+### Snippet（Shell 片段）
+
+`relay snippet add <name> <content...>` —— 存储任意 Shell 代码片段。与普通简写（绕过 Shell 直接执行）不同，snippet 通过 Shell 解释器执行，并支持通过 [polysh](https://github.com/ffgenius/polysh) 进行**跨 Shell 自动翻译**。
+
+```bash
+# 创建 snippet —— relay 自动检测当前 Shell 环境
+relay snippet add goback "cd ../"
+
+# 运行 —— 如果当前 Shell 与创建时不同，relay 会自动翻译
+# （Unix ↔ PowerShell ↔ CMD）
+relay snippet run goback
+
+# 预览翻译结果，不实际执行
+relay snippet run goback --dry-run
+```
+
+**为什么需要 snippet？** `cd`、`export`、复杂管道、Shell 内置命令等无法通过 relay 的直接执行模型工作。Snippet 填补了这一空白，同时保持跨 Shell 的移植性。
 
 ---
 
@@ -168,16 +190,39 @@ vd         # → vite dev（永远）
 
 | 命令 | 说明 |
 |---|---|
-| `relay export` | 把当前配置以 YAML 形式打印到 stdout |
+| `relay export` | 把当前配置以 YAML 形式打印到 stdout（默认包含 snippets） |
 | `relay export -o <file>` | 导出到文件（如果省略后缀会自动补 `.yaml`） |
-| `relay import <file>` | 从文件合并配置（冲突时保留本地） |
+| `relay export --no-snippet` | 只导出 commands，排除 snippets |
+| `relay import <file>` | 从文件合并配置。Snippets **默认跳过**（安全考虑） |
 | `relay import <file> --overwrite` | 从文件合并配置（冲突时覆盖本地） |
+| `relay import <file> --allow-snippet` | 同时导入文件中的 snippets |
 | `relay sync init` | 创建私密 GitHub Gist 并把本机绑定上去 |
 | `relay sync link <gist_id>` | 把本机绑定到已有的 Gist |
 | `relay sync unlink` | 取消本机的 Gist 绑定（远端 Gist 不会被删） |
-| `relay sync push` | 上传本地配置到 Gist |
-| `relay sync pull` | 从 Gist 下载配置（会覆盖本地） |
-| `relay sync status` | 查看同步是否配置、是否有未推送的变更 |
+| `relay sync push` | 上传本地配置（commands + snippets）到 Gist |
+| `relay sync push --no-snippet` | 只上传 commands，排除 snippets |
+| `relay sync pull` | 从 Gist 下载配置。Snippets **默认跳过** |
+| `relay sync pull --allow-snippet` | 下载并包含 snippets |
+| `relay sync status` | 查看同步状态、commands 和 snippets 数量 |
+
+### Snippets
+
+| 命令 | 说明 |
+|---|---|
+| `relay snippet add <name> <content...>` | 创建 snippet（自动检测当前 Shell） |
+| `relay snippet add <name> <content...> --shell <d>` | 指定 Shell 方言（`unix`、`powershell`、`cmd`） |
+| `relay snippet add <name> <content...> --desc <d>` | 添加描述 |
+| `relay snippet remove <name>`（别名 `rm`） | 删除 snippet |
+| `relay snippet list`（别名 `ls`） | 列出所有 snippets |
+| `relay snippet info <name>` | 查看单个 snippet 详情 |
+| `relay snippet edit <name> --content <c>` | 修改内容 |
+| `relay snippet edit <name> --desc <d>` | 修改描述（传 `""` 清除） |
+| `relay snippet edit <name> --shell <d>` | 修改 Shell 方言 |
+| `relay snippet run <name>` | 执行 snippet（自动翻译到当前 Shell） |
+| `relay snippet run <name> --dry-run` | 只打印翻译后的命令，不执行 |
+| `relay snippet run <name> --no-translate` | 跳过翻译，原样执行 |
+| `relay snippet clear` | 删除所有 snippets（会先确认） |
+| `relay snippet clear --yes` | 同上，但不确认 |
 
 ### 系统
 
@@ -227,8 +272,8 @@ relay sync pull               # 拉取最新
 
 Relay 的卖点就是 **构造性安全** —— 跑 `v dev` 必须和直接跑 `vite dev` **等价到无聊**。下面 4 条原则是代码级强制：
 
-> **原则 1 — Relay 不执行 shell。**
-> 不调用 `sh -c`，不调用 `cmd /c`，不调用 `powershell -Command`。runner 用 `std::process::Command` 直接 spawn 目标二进制。
+> **原则 1 — Relay 不执行 shell（snippet 除外）。**
+> 普通简写用 `std::process::Command` 直接 spawn 目标二进制 —— 不调 `sh -c`、不调 `cmd /c`、不调 `powershell -Command`。**Snippet 是有意为之的例外**：因为 snippet 本身就是 Shell 代码，它必须通过 Shell 解释器执行。正因如此，import/pull 默认跳过 snippets，需 `--allow-snippet` 显式授权。
 
 > **原则 2 — Relay 不执行字符串。**
 > 一条简写在内部是 `(program, args)` 元组。不存在 `exec: "vite dev && rm -rf /"` 这种字段。"字符串当命令"在数据结构里根本不存在。
@@ -249,7 +294,7 @@ Relay 的卖点就是 **构造性安全** —— 跑 `v dev` 必须和直接跑 
 
 ```
 ~/.relay/
-├── config.yaml          # 已注册的简写
+├── config.yaml          # 已注册的简写 + snippets
 ├── sync-state.yaml      # （可选）已绑定的 Gist ID + 同步哈希
 └── bin/                 # 生成的 shim，这个目录被加入 PATH
     ├── v                # Windows 下是 v.cmd
@@ -270,6 +315,16 @@ commands:
     program: vite
     args:
       - dev
+snippets:
+  goback:
+    type: snippet
+    content: "cd ../"
+    shell: unix
+  serve:
+    type: snippet
+    content: "python3 -m http.server 8080"
+    shell: unix
+    description: "启动本地文件服务器"
 ```
 
 ---

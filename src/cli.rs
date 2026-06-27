@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use crate::{
     config::{self, Paths},
-    discover, doctor, registry, runner, shim, sync, ui, Result,
+    discover, doctor, registry, runner, shim, snippet, sync, ui, Result,
 };
 
 #[derive(Debug, Parser)]
@@ -121,6 +121,17 @@ pub enum Command {
         #[command(subcommand)]
         action: SyncAction,
     },
+
+    /// Manage shell code snippets with cross-shell translation.
+    ///
+    /// Snippets are arbitrary shell code fragments stored alongside
+    /// your command aliases. Unlike regular commands (which bypass the
+    /// shell), snippets are executed through a shell interpreter and
+    /// benefit from automatic cross-shell translation via polysh.
+    Snippet {
+        #[command(subcommand)]
+        action: SnippetAction,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -128,9 +139,17 @@ pub enum SyncAction {
     /// Create a new private Gist and link this machine to it.
     Init,
     /// Upload the local config to the linked Gist.
-    Push,
+    Push {
+        /// Exclude snippets from the push.
+        #[arg(long)]
+        no_snippet: bool,
+    },
     /// Download the Gist config and overwrite the local config.
-    Pull,
+    Pull {
+        /// Allow importing snippets from the remote Gist.
+        #[arg(long)]
+        allow_snippet: bool,
+    },
     /// Show whether sync is configured and clean/dirty.
     Status,
     /// Link this machine to an existing Gist by ID.
@@ -141,6 +160,66 @@ pub enum SyncAction {
     /// Forget the linked Gist on this machine. Does not delete the Gist
     /// itself — it stays on GitHub, ready to be re-linked later.
     Unlink,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SnippetAction {
+    /// Create a new snippet. Content is auto-detected for shell dialect.
+    Add {
+        /// The short name for this snippet (e.g. `goback`).
+        name: String,
+        /// The shell code content.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
+        /// Manually specify the shell dialect (unix, powershell, cmd).
+        #[arg(long)]
+        shell: Option<String>,
+        /// Optional human-readable description.
+        #[arg(long)]
+        desc: Option<String>,
+    },
+    /// Delete a snippet.
+    #[command(visible_aliases = ["rm"])]
+    Remove {
+        name: String,
+        /// Skip the confirmation prompt.
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// List all registered snippets.
+    #[command(visible_aliases = ["ls"])]
+    List,
+    /// Show the full details of one snippet.
+    Info { name: String },
+    /// Edit a snippet's content, description, or shell dialect.
+    Edit {
+        name: String,
+        /// New content for the snippet.
+        #[arg(long)]
+        content: Option<String>,
+        /// New description (pass empty string to clear).
+        #[arg(long)]
+        desc: Option<String>,
+        /// New shell dialect.
+        #[arg(long)]
+        shell: Option<String>,
+    },
+    /// Execute a snippet, translating it to the current shell if needed.
+    Run {
+        name: String,
+        /// Print the translated command without executing it.
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip cross-shell translation, run as-is.
+        #[arg(long)]
+        no_translate: bool,
+    },
+    /// Remove all snippets.
+    Clear {
+        /// Skip the confirmation prompt.
+        #[arg(short, long)]
+        yes: bool,
+    },
 }
 
 /// Entry point used by `main.rs` and by integration tests.
@@ -186,15 +265,44 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         }
         Command::Clear { yes } => registry::clear(&paths, *yes)?,
         Command::Run { name, args } => runner::run(&paths, name, args)?,
-        Command::Export { output } => registry::export(&paths, output.as_deref())?,
-        Command::Import { file, overwrite } => registry::import(&paths, file, *overwrite)?,
+        Command::Export { output } => registry::export(&paths, output.as_deref(), false)?,
+        Command::Import { file, overwrite } => registry::import(&paths, file, *overwrite, false)?,
         Command::Sync { action } => match action {
             SyncAction::Init => sync::init(&paths)?,
-            SyncAction::Push => sync::push(&paths)?,
-            SyncAction::Pull => sync::pull(&paths)?,
+            SyncAction::Push { no_snippet } => sync::push(&paths, *no_snippet)?,
+            SyncAction::Pull { allow_snippet } => sync::pull(&paths, *allow_snippet)?,
             SyncAction::Status => sync::status(&paths)?,
             SyncAction::Link { gist_id } => sync::link(&paths, gist_id)?,
             SyncAction::Unlink => sync::unlink(&paths)?,
+        },
+        Command::Snippet { action } => match action {
+            SnippetAction::Add {
+                name,
+                content,
+                shell,
+                desc,
+            } => snippet::add(&paths, name, content, shell.as_deref(), desc.as_deref())?,
+            SnippetAction::Remove { name, yes } => snippet::remove(&paths, name, *yes)?,
+            SnippetAction::List => snippet::list(&paths)?,
+            SnippetAction::Info { name } => snippet::info(&paths, name)?,
+            SnippetAction::Edit {
+                name,
+                content,
+                desc,
+                shell,
+            } => snippet::edit(
+                &paths,
+                name,
+                content.as_deref(),
+                desc.as_deref(),
+                shell.as_deref(),
+            )?,
+            SnippetAction::Run {
+                name,
+                dry_run,
+                no_translate,
+            } => snippet::run(&paths, name, *dry_run, *no_translate)?,
+            SnippetAction::Clear { yes } => snippet::clear(&paths, *yes)?,
         },
     }
 
@@ -207,6 +315,12 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
             | Command::Remove { .. }
             | Command::Update { .. }
             | Command::Import { .. }
+            | Command::Snippet {
+                action: SnippetAction::Add { .. }
+                    | SnippetAction::Remove { .. }
+                    | SnippetAction::Edit { .. }
+                    | SnippetAction::Clear { .. },
+            }
     );
     if should_sync {
         let config = config::load(&paths)?;

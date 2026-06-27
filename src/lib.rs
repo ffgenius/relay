@@ -13,6 +13,7 @@ pub mod path_setup;
 pub mod registry;
 pub mod runner;
 pub mod shim;
+pub mod snippet;
 pub mod sync;
 pub mod ui;
 

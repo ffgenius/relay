@@ -518,6 +518,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "polysh"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a278e2f50db33a614630c6311afd78c7e2326be0a1a5d7a4611ec03d5923a109"
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -629,6 +635,7 @@ dependencies = [
  "indicatif",
  "insta",
  "owo-colors",
+ "polysh",
  "predicates",
  "serde",
  "serde_json",

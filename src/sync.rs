@@ -17,7 +17,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::config::{self, Config, Paths};
+use crate::config::{self, schema::ShellDialect, Config, Paths};
 use crate::{ui, RelayError, Result};
 
 /// Sync state persisted as `~/.relay/sync-state.yaml`.
@@ -144,11 +144,20 @@ pub fn unlink(paths: &Paths) -> Result<()> {
 }
 
 /// `relay sync push` — upload local config to the configured Gist.
-pub fn push(paths: &Paths) -> Result<()> {
+///
+/// By default, snippets are included in the push. Pass `no_snippet = true`
+/// to exclude them (only commands will be uploaded).
+pub fn push(paths: &Paths, no_snippet: bool) -> Result<()> {
     check_gh()?;
     let state = load_sync_state(paths)?;
 
-    let config = config::load(paths)?;
+    let mut config = config::load(paths)?;
+    let snippet_count = config.snippets.len();
+
+    if no_snippet {
+        config.snippets.clear();
+    }
+
     let content = config_yaml_string(&config)?;
     let hash = sha256_hex(&content);
 
@@ -157,7 +166,23 @@ pub fn push(paths: &Paths) -> Result<()> {
         pb.finish_and_clear();
         return Err(e);
     }
-    ui::spinner_finish(&pb, format!("Pushed ({} commands)", config.commands.len()));
+
+    let msg = if no_snippet {
+        format!(
+            "Pushed ({} commands). {} snippet(s) excluded.",
+            config.commands.len(),
+            snippet_count
+        )
+    } else if snippet_count > 0 {
+        format!(
+            "Pushed ({} commands + {} snippets)",
+            config.commands.len(),
+            snippet_count
+        )
+    } else {
+        format!("Pushed ({} commands)", config.commands.len())
+    };
+    ui::spinner_finish(&pb, msg);
 
     save_sync_state(
         paths,
@@ -174,7 +199,10 @@ pub fn push(paths: &Paths) -> Result<()> {
 ///
 /// If the local config has unsynced changes, warn and ask for confirmation
 /// before overwriting.
-pub fn pull(paths: &Paths) -> Result<()> {
+///
+/// Snippets are **skipped by default** for security. Pass
+/// `allow_snippet = true` to pull them from the remote Gist.
+pub fn pull(paths: &Paths, allow_snippet: bool) -> Result<()> {
     check_gh()?;
     let state = load_sync_state(paths)?;
 
@@ -204,10 +232,17 @@ pub fn pull(paths: &Paths) -> Result<()> {
     };
 
     // The Gist stores a config.yaml file, parse it.
-    let remote_config: Config = serde_yaml::from_str(&remote_content).map_err(|e| {
+    let mut remote_config: Config = serde_yaml::from_str(&remote_content).map_err(|e| {
         pb.finish_and_clear();
         RelayError::Other(anyhow::anyhow!("invalid config in Gist: {e}"))
     })?;
+
+    let remote_snippet_count = remote_config.snippets.len();
+
+    // Strip snippets unless explicitly allowed.
+    if !allow_snippet && remote_snippet_count > 0 {
+        remote_config.snippets.clear();
+    }
 
     // Write to disk.
     config::save(paths, &remote_config)?;
@@ -224,13 +259,36 @@ pub fn pull(paths: &Paths) -> Result<()> {
     // Re-sync shims.
     crate::shim::sync(paths, &remote_config)?;
 
-    ui::spinner_finish(
-        &pb,
+    let msg = if allow_snippet {
         format!(
-            "Pulled ({} commands). Shims regenerated.",
-            remote_config.commands.len()
-        ),
-    );
+            "Pulled ({} commands + {} snippets). Shims regenerated.",
+            remote_config.commands.len(),
+            remote_snippet_count
+        )
+    } else {
+        let extra = if remote_snippet_count > 0 {
+            format!(
+                " {} snippet(s) not pulled. Use --allow-snippet to include them.",
+                remote_snippet_count
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            "Pulled ({} commands).{} Shims regenerated.",
+            remote_config.commands.len(),
+            extra
+        )
+    };
+    ui::spinner_finish(&pb, msg);
+
+    if !allow_snippet && remote_snippet_count > 0 {
+        ui::warn(format!(
+            "{} snippet(s) not pulled. Use --allow-snippet to include them.",
+            remote_snippet_count
+        ));
+    }
+
     Ok(())
 }
 
@@ -274,6 +332,37 @@ pub fn status(paths: &Paths) -> Result<()> {
                 .count(),
         ),
     );
+
+    if !config.snippets.is_empty() {
+        let unix_count = config
+            .snippets
+            .values()
+            .filter(|s| s.shell == ShellDialect::Unix)
+            .count();
+        let ps_count = config
+            .snippets
+            .values()
+            .filter(|s| s.shell == ShellDialect::PowerShell)
+            .count();
+        let cmd_count = config
+            .snippets
+            .values()
+            .filter(|s| s.shell == ShellDialect::Cmd)
+            .count();
+        let mut parts = Vec::new();
+        if unix_count > 0 {
+            parts.push(format!("{unix_count} unix"));
+        }
+        if ps_count > 0 {
+            parts.push(format!("{ps_count} powershell"));
+        }
+        if cmd_count > 0 {
+            parts.push(format!("{cmd_count} cmd"));
+        }
+        ui::field("snippets", parts.join(", "));
+    } else {
+        ui::field("snippets", "0");
+    }
 
     Ok(())
 }
