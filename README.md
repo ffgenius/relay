@@ -368,13 +368,9 @@ Run `gh auth login` once. Relay piggybacks on your GitHub CLI session — it nev
 ```bash
 git clone https://github.com/ffgenius/relay
 cd relay
-git config core.hooksPath .githooks   # enable pre-commit auto-format
 cargo build
 cargo test
 ```
-
-The pre-commit hook runs `cargo fmt --all` on staged `.rs` files, so CI's
-fmt check never bites you. Skip with `git commit --no-verify` if needed.
 
 Issues and PRs welcome.
 
