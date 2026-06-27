@@ -1,6 +1,6 @@
 {
   "name": "@ffgenius/relay",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Secure cross-platform command router",
   "license": "MIT",
   "author": "Bin <fuwb0407@gmail.com>",
