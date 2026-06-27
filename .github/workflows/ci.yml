@@ -70,7 +70,7 @@ jobs:
       - name: rust cache
         uses: Swatinem/rust-cache@v2
 
-- name: cargo clippy
+      - name: cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
