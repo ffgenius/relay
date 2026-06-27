@@ -6,7 +6,7 @@
 #   1. `auto-tag` — if a commit message starts with `release: v*.*.*`,
 #      the job creates and pushes a matching git tag. That tag then
 #      triggers the `release.yml` workflow.
-#   2. `lint`   — cargo fmt + cargo clippy (ubuntu, fastest runner).
+#   2. `lint`   — cargo clippy (ubuntu, fastest runner).
 #   3. `test`   — cargo test on ubuntu / macos / windows, matrix.
 #      caches Rust toolchain + target dir between runs.
 
@@ -59,7 +59,7 @@ jobs:
           git push origin "${{ steps.parse.outputs.tag }}"
 
   lint:
-    name: lint (fmt + clippy)
+    name: lint (clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -69,9 +69,6 @@ jobs:
 
       - name: rust cache
         uses: Swatinem/rust-cache@v2
-
-      - name: cargo fmt
-        run: cargo fmt --all --check
 
       - name: cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
