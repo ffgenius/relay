@@ -17,12 +17,9 @@
 #
 # To release a new version:
 #   1. Bump `version` in Cargo.toml (and npm package.json files).
-#   2. Push a v*.*.* tag — the release workflow builds and creates a
-#      GitHub Release with per-platform archives.
-#   3. Then commit any change to this file (e.g. touch a comment) and
-#      push — the sync workflow resolves VERSION from Cargo.toml and
-#      SHA256_* from the release archives, and pushes the completed
-#      formula to ffgenius/homebrew-tap.
+#   2. Push a v*.*.* tag — the release workflow builds, creates a GitHub
+#      Release with per-platform archives, and the sync workflow triggers
+#      automatically to push the formula to ffgenius/homebrew-tap.
 # ---------------------------------------------------------------------------
 class Relay < Formula
   desc "Secure cross-platform command router"
