@@ -168,18 +168,22 @@ pub enum SyncAction {
 #[derive(Debug, Subcommand)]
 pub enum SnippetAction {
     /// Create a new snippet. Content is auto-detected for shell dialect.
+    ///
+    /// Put --shell and --desc **before** the trailing content so clap can
+    /// parse them as named flags; otherwise `trailing_var_arg` would swallow
+    /// them into the content vector.
     Add {
         /// The short name for this snippet (e.g. `goback`).
         name: String,
-        /// The shell code content.
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        content: Vec<String>,
         /// Manually specify the shell dialect (unix, powershell, cmd).
         #[arg(long)]
         shell: Option<String>,
         /// Optional human-readable description.
         #[arg(long)]
         desc: Option<String>,
+        /// The shell code content.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
     },
     /// Delete a snippet.
     #[command(visible_aliases = ["rm"])]

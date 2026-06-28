@@ -84,6 +84,9 @@ pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<
     if config.commands.contains_key(name) {
         return Err(RelayError::CommandExists(name.to_string()));
     }
+    if config.snippets.contains_key(name) {
+        return Err(RelayError::SnippetNameConflict(name.to_string()));
+    }
 
     let kind = if args.is_empty() {
         CommandKind::Prefix
@@ -300,6 +303,11 @@ pub fn import(
     let mut snippet_overwritten = 0usize;
 
     for (name, cmd) in incoming.commands {
+        // A command must not shadow an existing snippet name.
+        if current.snippets.contains_key(&name) {
+            skipped += 1;
+            continue;
+        }
         match current.commands.entry(name) {
             std::collections::btree_map::Entry::Occupied(mut e) => {
                 if overwrite {
