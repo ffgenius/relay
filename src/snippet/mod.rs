@@ -197,20 +197,28 @@ pub fn clear(paths: &Paths, auto_yes: bool) -> Result<()> {
 
 /// `relay snippet run <name>` — execute a snippet, optionally translating
 /// it to the current shell dialect via polysh.
-pub fn run(paths: &Paths, name: &str, dry_run: bool, no_translate: bool) -> Result<()> {
+///
+/// Pass `target` to override the auto-detected current dialect — useful
+/// for testing cross-shell translation results (e.g. `--target unix`).
+/// Pass `force` to run a best-effort translation even when polysh cannot
+/// fully translate all segments.
+pub fn run(paths: &Paths, name: &str, dry_run: bool, no_translate: bool, target: Option<&str>, force: bool) -> Result<()> {
     let config = config::load(paths)?;
     let snip = config
         .snippets
         .get(name)
         .ok_or_else(|| RelayError::UnknownSnippet(name.to_string()))?;
 
-    let current_dialect = detect_current_dialect();
+    let current_dialect = match target {
+        Some(t) => parse_dialect(t)?,
+        None => detect_current_dialect(),
+    };
     let stored_dialect = snip.shell;
 
     let command = if no_translate || current_dialect == stored_dialect {
         snip.content.clone()
     } else {
-        translate_content(&snip.content, stored_dialect, current_dialect)?
+        translate_content(&snip.content, stored_dialect, current_dialect, force)?
     };
 
     if dry_run {
@@ -271,7 +279,11 @@ pub fn dialect_name(d: ShellDialect) -> &'static str {
 
 /// Translate snippet content from `source` dialect to `target` dialect
 /// using polysh.
-fn translate_content(content: &str, source: ShellDialect, target: ShellDialect) -> Result<String> {
+///
+/// Returns an error when the translation has unsupported segments, to
+/// prevent silently executing broken/garbled commands. Use `--force` to
+/// override this safety check.
+fn translate_content(content: &str, source: ShellDialect, target: ShellDialect, force: bool) -> Result<String> {
     let src: polysh::mappings::Dialect = source.into();
     let tgt: polysh::mappings::Dialect = target.into();
 
@@ -292,11 +304,33 @@ fn translate_content(content: &str, source: ShellDialect, target: ShellDialect) 
     if translated != content {
         let lint = polysh::translator::lint_command(content);
         if !lint.unsupported.is_empty() {
-            let names: Vec<&str> = lint.unsupported.iter().map(|s| s.as_str()).collect();
-            ui::warn(format!(
-                "could not fully translate: {} — executing best-effort result",
-                names.join(", ")
-            ));
+            let names: Vec<String> = lint
+                .unsupported
+                .iter()
+                .map(|s| {
+                    // Extract just the unknown command name for readability.
+                    if let Some(pos) = s.find("(unknown command: '") {
+                        let cmd = &s[pos + "(unknown command: '".len()..];
+                        let cmd = cmd.trim_end_matches("')");
+                        format!("'{}'", cmd)
+                    } else {
+                        s.clone()
+                    }
+                })
+                .collect();
+
+            if force {
+                ui::warn(format!(
+                    "incomplete translation ({}). Running best-effort result.",
+                    names.join(", ")
+                ));
+            } else {
+                return Err(RelayError::Other(anyhow::anyhow!(
+                    "Cannot translate {}. Use --no-translate to run in the stored dialect, or --force to run the best-effort translation.\n       Unsupported: {}",
+                    names.join(", "),
+                    lint.unsupported.join("\n       → ")
+                )));
+            }
         }
     }
 

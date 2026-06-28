@@ -220,6 +220,15 @@ pub enum SnippetAction {
         /// Skip cross-shell translation, run as-is.
         #[arg(long)]
         no_translate: bool,
+        /// Run best-effort translation even when polysh cannot fully translate
+        /// all segments. Without this flag, incomplete translations are
+        /// rejected as an error.
+        #[arg(long)]
+        force: bool,
+        /// Force a target shell dialect for translation (unix, powershell, cmd).
+        /// Overrides auto-detection — useful for testing cross-shell results.
+        #[arg(long)]
+        target: Option<String>,
     },
     /// Remove all snippets.
     Clear {
@@ -308,7 +317,9 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
                 name,
                 dry_run,
                 no_translate,
-            } => snippet::run(&paths, name, *dry_run, *no_translate)?,
+                force,
+                target,
+            } => snippet::run(&paths, name, *dry_run, *no_translate, target.as_deref(), *force)?,
             SnippetAction::Clear { yes } => snippet::clear(&paths, *yes)?,
         },
     }
