@@ -1,6 +1,9 @@
 # Release workflow.
 #
-# Trigger:  push a tag matching `v*.*.*` (e.g. `v0.0.1`).
+# Trigger:  push a tag matching `v*` (e.g. `v0.0.1`, `v0.1.0-beta.1`).
+#
+# Local prep:  run `bash scripts/release.sh` to bump the version in
+#   Cargo.toml + npm/**/package.json, then commit + tag.
 #
 # Strategy:
 #   1. `build` — matrix-build the relay binary on native runners for each
@@ -10,17 +13,25 @@
 #      each binary into the matching `npm/platforms/<plat>-<arch>/bin/`
 #      directory, then `npm publish`es all 6 platform packages followed by
 #      the wrapper.
+#   3. `create-github-release` — depends on `build`. Uses `changelogithub`
+#      to generate a GitHub Release from conventional commits, then attaches
+#      per-platform binary archives.
+#   4. `sync-homebrew` — depends on `create-github-release`. Copies the
+#      formula from pkg/brew/relay.rb, fills in version + sha256 placeholders
+#      from pre-computed values, and pushes to ffgenius/homebrew-tap.
 #
 # Required secrets:
 #   - NPM_TOKEN  — npm automation token with publish permission on the
 #                  `@ffgenius` scope.
+#   - HOMEBREW_TAP_TOKEN — GitHub PAT with write permission on
+#                  ffgenius/homebrew-tap (public_repo scope).
 
 name: release
 
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
 
 permissions:
   contents: write   # needed if we later attach binaries to a GH Release
@@ -168,7 +179,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      # 1. Create GitHub Release with conventional-commits changelog.
+      - name: generate changelog and create release
+        run: npx changelogithub --no-group
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2. Download build artifacts and create per-platform archives.
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -214,13 +239,47 @@ jobs:
           # Persist for the formula sync step.
           cat "$SHA256_FILE" >> "$GITHUB_ENV"
 
-      - name: create GitHub Release
+      # 3. Attach binary archives to the release created in step 1.
+      - name: upload archives to release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ github.ref_name }}"
           files: |
             relay-*.tar.gz
             relay-*.zip
-          generate_release_notes: true
           fail_on_unmatched_files: true
+
+      # 4. Persist sha256.env for the sync-homebrew job.
+      - name: upload sha256 manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: sha256.env
+          path: sha256.env
+          if-no-files-found: error
+
+  # ── Homebrew Sync ─────────────────────────────────────────────────────────
+  #
+  # Runs after the GitHub Release is created. Downloads the sha256 manifest
+  # computed above, then pushes the completed formula to ffgenius/homebrew-tap.
+  sync-homebrew:
+    name: sync to homebrew tap
+    needs: create-github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: download sha256 manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: sha256.env
+
+      - name: push formula to tap repo
+        env:
+          TAP_REPO: ffgenius/homebrew-tap
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          source sha256.env
+          export TAP_REPO TAP_TOKEN VERSION \
+            SHA256_DARWIN_ARM64 SHA256_DARWIN_X64 \
+            SHA256_LINUX_ARM64 SHA256_LINUX_X64
+          bash scripts/sync-brew.sh
 

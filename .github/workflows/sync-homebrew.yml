@@ -1,14 +1,10 @@
 # Sync Homebrew formula to ffgenius/homebrew-tap
 #
-# Trigger: push to master that touches pkg/brew/relay.rb.
+# Trigger: push to master that touches pkg/brew/relay.rb, or manual dispatch.
 #
-# The formula in pkg/brew/relay.rb is the single source of truth.
-# This workflow:
-#   1. Reads the real version from Cargo.toml.
-#   2. Downloads the release archives from GitHub Releases.
-#   3. Computes sha256 checksums.
-#   4. Replaces {{VERSION}} and {{SHA256_*}} placeholders with real values.
-#   5. Pushes the completed formula to ffgenius/homebrew-tap.
+# NOTE:  the release workflow (release.yml) also syncs the formula after
+# creating a GitHub Release — that path receives pre-computed sha256 hashes
+# directly, so it is faster and more reliable.
 #
 # Required secret:
 #   HOMEBREW_TAP_TOKEN — GitHub PAT with write permission on
@@ -22,90 +18,23 @@ on:
       - master
     paths:
       - pkg/brew/relay.rb
-  workflow_run:
-    workflows: ["release"]
-    types: [completed]
   workflow_dispatch:
 
 jobs:
   sync:
     name: sync to ffgenius/homebrew-tap
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: push formula to tap repo
+      - name: compute sha256 and sync
         env:
           TAP_REPO: ffgenius/homebrew-tap
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          if [ -z "${TAP_TOKEN:-}" ]; then
-            echo "::error:: HOMEBREW_TAP_TOKEN secret is not set"
-            exit 1
-          fi
-          set -euo pipefail
-
-          # ── Read version from Cargo.toml ────────────────────────────
-          VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' Cargo.toml)
-          if [ -z "${VERSION}" ]; then
-            echo "::error:: could not parse version from Cargo.toml"
-            exit 1
-          fi
-          TAG="v${VERSION}"
-          echo "version: ${VERSION}  (tag: ${TAG})"
-
-          # ── Compute sha256 for each platform archive ────────────────
-          echo "::group::computing sha256 checksums"
-          declare -A SHA256
-
-          for plat_arch in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
-            ARCHIVE="relay-${VERSION}-${plat_arch}.tar.gz"
-            URL="https://github.com/ffgenius/relay/releases/download/${TAG}/${ARCHIVE}"
-            echo "  downloading ${ARCHIVE}…"
-            HASH=$(curl -fsSL "${URL}" | sha256sum | cut -d' ' -f1)
-            if [ -z "${HASH}" ]; then
-              echo "::error:: failed to download or checksum ${URL}"
-              exit 1
-            fi
-            VARNAME="SHA256_$(echo "${plat_arch}" | tr 'a-z-' 'A-Z_')"
-            SHA256["${VARNAME}"]="${HASH}"
-            echo "  ${VARNAME}=${HASH}"
-          done
-          echo "::endgroup::"
-
-          # ── Clone tap repo, apply formula, push ────────────────────
-          echo "::group::syncing to ${TAP_REPO}"
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" /tmp/tap
-          mkdir -p /tmp/tap/Formula
-
-          cp pkg/brew/relay.rb /tmp/tap/Formula/relay.rb
-          cd /tmp/tap
-
-          # Replace version placeholder.
-          sed -i "s|{{VERSION}}|${VERSION}|g" Formula/relay.rb
-
-          # Replace sha256 placeholders.
-          for VARNAME in "${!SHA256[@]}"; do
-            sed -i "s|{{${VARNAME}}}|${SHA256[${VARNAME}]}|g" Formula/relay.rb
-          done
-
-          # Verify no unreplaced placeholders remain.
-          if grep -n '{{' Formula/relay.rb; then
-            echo "::error:: unreplaced placeholders in formula"
-            exit 1
-          fi
-
-          # Commit and push.
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if git diff --quiet; then
-            echo "formula unchanged — nothing to push"
-          else
-            git add Formula/relay.rb
-            git commit -m "relay ${TAG}"
-            git push
-            echo "::notice:: pushed formula update for ${TAG} to ${TAP_REPO}"
-          fi
-          echo "::endgroup::"
+          bash scripts/compute-sha256.sh
+          source sha256.env
+          export TAP_REPO TAP_TOKEN VERSION \
+            SHA256_DARWIN_ARM64 SHA256_DARWIN_X64 \
+            SHA256_LINUX_ARM64 SHA256_LINUX_X64
+          bash scripts/sync-brew.sh

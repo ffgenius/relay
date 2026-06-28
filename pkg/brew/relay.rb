@@ -16,10 +16,9 @@
 # the release archives, computes sha256 checksums, and fills everything in.
 #
 # To release a new version:
-#   1. Bump `version` in Cargo.toml (and npm package.json files).
-#   2. Push a v*.*.* tag — the release workflow builds, creates a GitHub
-#      Release with per-platform archives, and the sync workflow triggers
-#      automatically to push the formula to ffgenius/homebrew-tap.
+#   1. Run `bash scripts/release.sh` to bump versions and tag.
+#   2. Push the tag — CI builds, creates a GitHub Release, and syncs this
+#      formula to ffgenius/homebrew-tap automatically.
 # ---------------------------------------------------------------------------
 class Relay < Formula
   desc "Secure cross-platform command router"
