@@ -114,6 +114,9 @@ pub enum Command {
         /// Overwrite existing aliases on conflict. Default is to keep local.
         #[arg(long)]
         overwrite: bool,
+        /// Allow importing snippets from the config file.
+        #[arg(long)]
+        allow_snippet: bool,
     },
 
     /// Sync config to a private GitHub Gist (requires `gh` CLI).
@@ -266,7 +269,7 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         Command::Clear { yes } => registry::clear(&paths, *yes)?,
         Command::Run { name, args } => runner::run(&paths, name, args)?,
         Command::Export { output } => registry::export(&paths, output.as_deref(), false)?,
-        Command::Import { file, overwrite } => registry::import(&paths, file, *overwrite, false)?,
+        Command::Import { file, overwrite, allow_snippet } => registry::import(&paths, file, *overwrite, *allow_snippet)?,
         Command::Sync { action } => match action {
             SyncAction::Init => sync::init(&paths)?,
             SyncAction::Push { no_snippet } => sync::push(&paths, *no_snippet)?,
