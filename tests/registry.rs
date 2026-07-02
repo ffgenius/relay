@@ -44,7 +44,7 @@ fn add_and_list_prefix_command() {
 
     // We can't actually run `which("cargo")` on CI, but cargo is guaranteed
     // present in the dev environment.  Use it as the test program.
-    registry::add(&paths, "c", "cargo", &[]).unwrap();
+    registry::add(&paths, "c", "cargo", &[], false).unwrap();
 
     let cfg = config::load(&paths).unwrap();
     let cmd = cfg.commands.get("c").expect("command should exist");
@@ -58,7 +58,7 @@ fn add_exact_command() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
 
-    registry::add(&paths, "cb", "cargo", &["build".to_string()]).unwrap();
+    registry::add(&paths, "cb", "cargo", &["build".to_string()], false).unwrap();
     let cfg = config::load(&paths).unwrap();
     let cmd = cfg.commands.get("cb").expect("command should exist");
     assert_eq!(cmd.kind, CommandKind::Exact);
@@ -67,12 +67,26 @@ fn add_exact_command() {
 }
 
 #[test]
+fn add_prefix_with_args() {
+    let (_tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+
+    // --prefix forces Prefix mode even when fixed args are supplied.
+    registry::add(&paths, "gt", "git", &["clone".to_string()], true).unwrap();
+    let cfg = config::load(&paths).unwrap();
+    let cmd = cfg.commands.get("gt").expect("command should exist");
+    assert_eq!(cmd.kind, CommandKind::Prefix);
+    assert_eq!(cmd.program, "git");
+    assert_eq!(cmd.args, &["clone"]);
+}
+
+#[test]
 fn add_duplicate_name_fails() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo", &[]).unwrap();
+    registry::add(&paths, "c", "cargo", &[], false).unwrap();
 
-    let err = registry::add(&paths, "c", "cargo", &[]).unwrap_err();
+    let err = registry::add(&paths, "c", "cargo", &[], false).unwrap_err();
     assert!(matches!(err, RelayError::CommandExists(_)));
 }
 
@@ -80,7 +94,7 @@ fn add_duplicate_name_fails() {
 fn add_empty_name_fails() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    let err = registry::add(&paths, "", "cargo", &[]).unwrap_err();
+    let err = registry::add(&paths, "", "cargo", &[], false).unwrap_err();
     assert!(matches!(err, RelayError::InvalidCommandName(_, _)));
 }
 
@@ -88,7 +102,7 @@ fn add_empty_name_fails() {
 fn add_name_with_special_chars_fails() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    let err = registry::add(&paths, "my command!", "cargo", &[]).unwrap_err();
+    let err = registry::add(&paths, "my command!", "cargo", &[], false).unwrap_err();
     assert!(matches!(err, RelayError::InvalidCommandName(_, _)));
 }
 
@@ -97,7 +111,7 @@ fn add_blocklisted_program_fails() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
     for bad in &["sh", "bash", "zsh", "cmd", "powershell", "pwsh"] {
-        let err = registry::add(&paths, "x", bad, &[]).unwrap_err();
+        let err = registry::add(&paths, "x", bad, &[], false).unwrap_err();
         assert!(
             matches!(err, RelayError::ForbiddenProgram(_)),
             "expected forbidden for {bad}"
@@ -109,7 +123,7 @@ fn add_blocklisted_program_fails() {
 fn add_strips_exe_suffix() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo.exe", &[]).unwrap();
+    registry::add(&paths, "c", "cargo.exe", &[], false).unwrap();
     let cfg = config::load(&paths).unwrap();
     assert_eq!(cfg.commands["c"].program, "cargo", ".exe suffix stripped");
 }
@@ -119,7 +133,7 @@ fn add_rejects_path_in_program() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
     for bad in &["./cargo", "/usr/bin/cargo", "foo\\bar.exe"] {
-        let err = registry::add(&paths, "x", bad, &[]).unwrap_err();
+        let err = registry::add(&paths, "x", bad, &[], false).unwrap_err();
         assert!(
             matches!(err, RelayError::InvalidProgram(_, _)),
             "expected InvalidProgram for {bad}, got {err:?}"
@@ -131,7 +145,7 @@ fn add_rejects_path_in_program() {
 fn remove_existing() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo", &[]).unwrap();
+    registry::add(&paths, "c", "cargo", &[], false).unwrap();
     registry::remove(&paths, "c").unwrap();
     let cfg = config::load(&paths).unwrap();
     assert!(cfg.commands.is_empty());
@@ -149,8 +163,8 @@ fn remove_nonexistent_fails() {
 fn update_existing() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo", &[]).unwrap();
-    registry::update(&paths, "c", "cargo", &["test".to_string()]).unwrap();
+    registry::add(&paths, "c", "cargo", &[], false).unwrap();
+    registry::update(&paths, "c", "cargo", &["test".to_string()], false).unwrap();
 
     let cfg = config::load(&paths).unwrap();
     let cmd = cfg.commands.get("c").unwrap();
@@ -159,10 +173,28 @@ fn update_existing() {
 }
 
 #[test]
+fn update_to_prefix_with_args() {
+    let (_tmp, paths) = tmp_paths();
+    registry::init(&paths).unwrap();
+    registry::add(&paths, "gt", "git", &["clone".to_string()], false).unwrap();
+    assert_eq!(
+        config::load(&paths).unwrap().commands["gt"].kind,
+        CommandKind::Exact
+    );
+
+    // Update with --prefix: should flip from Exact to Prefix.
+    registry::update(&paths, "gt", "git", &["clone".to_string()], true).unwrap();
+    assert_eq!(
+        config::load(&paths).unwrap().commands["gt"].kind,
+        CommandKind::Prefix
+    );
+}
+
+#[test]
 fn update_nonexistent_fails() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    let err = registry::update(&paths, "nope", "cargo", &[]).unwrap_err();
+    let err = registry::update(&paths, "nope", "cargo", &[], false).unwrap_err();
     assert!(matches!(err, RelayError::UnknownCommand(_)));
 }
 
@@ -178,7 +210,7 @@ fn list_empty() {
 fn info_returns_details() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo", &["clippy".to_string()]).unwrap();
+    registry::add(&paths, "c", "cargo", &["clippy".to_string()], false).unwrap();
     registry::info(&paths, "c").unwrap();
 }
 
@@ -220,8 +252,8 @@ fn config_yaml_roundtrip() {
 fn clear_with_yes_removes_all() {
     let (_tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo", &[]).unwrap();
-    registry::add(&paths, "cb", "cargo", &["build".to_string()]).unwrap();
+    registry::add(&paths, "c", "cargo", &[], false).unwrap();
+    registry::add(&paths, "cb", "cargo", &["build".to_string()], false).unwrap();
     assert_eq!(config::load(&paths).unwrap().commands.len(), 2);
 
     registry::clear(&paths, true).unwrap();
@@ -240,7 +272,7 @@ fn clear_on_empty_is_noop() {
 fn export_appends_yaml_extension_when_missing() {
     let (tmp, paths) = tmp_paths();
     registry::init(&paths).unwrap();
-    registry::add(&paths, "c", "cargo", &[]).unwrap();
+    registry::add(&paths, "c", "cargo", &[], false).unwrap();
 
     // No extension on the export target — should become `.yaml`.
     let bare = tmp.path().join("backup");
@@ -271,8 +303,8 @@ fn export_and_import_roundtrip() {
     registry::init(&paths_b).unwrap();
 
     // Register two commands on machine A.
-    registry::add(&paths_a, "c", "cargo", &[]).unwrap();
-    registry::add(&paths_a, "cb", "cargo", &["build".to_string()]).unwrap();
+    registry::add(&paths_a, "c", "cargo", &[], false).unwrap();
+    registry::add(&paths_a, "cb", "cargo", &["build".to_string()], false).unwrap();
 
     // Export to a file in tmp_a.
     let export_file = tmp_a.path().join("export.yaml");
@@ -295,10 +327,10 @@ fn import_default_skips_existing() {
     registry::init(&paths_b).unwrap();
 
     // A has `c -> cargo`.
-    registry::add(&paths_a, "c", "cargo", &[]).unwrap();
+    registry::add(&paths_a, "c", "cargo", &[], false).unwrap();
 
     // B already has its own `c -> cargo build` — should be kept on import.
-    registry::add(&paths_b, "c", "cargo", &["build".to_string()]).unwrap();
+    registry::add(&paths_b, "c", "cargo", &["build".to_string()], false).unwrap();
 
     let export_file = tmp_a.path().join("export.yaml");
     registry::export(&paths_a, Some(&export_file), false).unwrap();
@@ -316,8 +348,8 @@ fn import_overwrite_replaces_existing() {
     registry::init(&paths_a).unwrap();
     registry::init(&paths_b).unwrap();
 
-    registry::add(&paths_a, "c", "cargo", &[]).unwrap();
-    registry::add(&paths_b, "c", "cargo", &["build".to_string()]).unwrap();
+    registry::add(&paths_a, "c", "cargo", &[], false).unwrap();
+    registry::add(&paths_b, "c", "cargo", &["build".to_string()], false).unwrap();
 
     let export_file = tmp_a.path().join("export.yaml");
     registry::export(&paths_a, Some(&export_file), false).unwrap();

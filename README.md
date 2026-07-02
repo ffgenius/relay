@@ -97,15 +97,19 @@ to go.
 ## Quick start
 
 ```bash
-# Register a prefix alias — `v <anything>` runs `vite <anything>`.
+# Prefix alias — `v <anything>` runs `vite <anything>`.
 relay add v vite
 
-# Register an exact alias — `vd` always runs `vite dev`, no arguments.
+# Prefix alias with default args — `gt <anything>` runs `git clone <anything>`.
+relay add gt git -p clone
+
+# Exact alias — `vd` always runs `vite dev`, no arguments accepted.
 relay add vd vite dev
 
 # Use them.
 v dev                 # → vite dev
 v build               # → vite build
+gt https://example.com/repo.git  # → git clone https://example.com/repo.git
 vd                    # → vite dev
 
 # Inspect.
@@ -139,16 +143,26 @@ v build    # → vite build
 v --help   # → vite --help
 ```
 
+You can also register a prefix alias **with default arguments** using `--prefix` / `-p`.
+The default args are always included, and any extra runtime args are appended after them:
+
+```bash
+relay add gt git -p clone
+gt https://example.com/repo.git          # → git clone https://example.com/repo.git
+gt --depth 1 https://example.com/repo.git # → git clone --depth 1 https://example.com/repo.git
+```
+
 ### Exact alias
 
-`relay add <name> <program> <args...>` — the arguments are baked in; runtime args are ignored.
+`relay add <name> <program> <args...>` (without `--prefix`) — the arguments are baked in; runtime args are rejected.
 
 ```bash
 relay add vd vite dev
 vd         # → vite dev (always)
+vd preview # → error: exact command does not accept extra arguments
 ```
 
-Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **exact** for one-liners you run all the time (`vd`, `gp`, `nci`).
+Use **prefix** for tools you call with many subcommands (`v`, `g`, `n`). Use **prefix with args** when the command itself has a fixed subcommand but you want to pass extra flags (`gt` for `git clone`). Use **exact** for one-liners you run all the time with no variation (`vd`, `gp`, `nci`).
 
 ### Snippet
 
@@ -177,9 +191,10 @@ relay snippet run goback --dry-run
 | Command | Description |
 |---|---|
 | `relay init` | Create `~/.relay`, write empty config, add `~/.relay/bin` to PATH |
-| `relay add <name> <program> [args...]` | Register an alias (prefix if no args, exact otherwise) |
+| `relay add <name> <program> [args...]` | Register an alias (prefix if no args or `--prefix`, exact otherwise) |
+| `relay add <name> <program> -p [args...]` | Register a prefix alias with default args (runtime args appended) |
 | `relay remove <name>` (alias: `rm`) | Delete an alias |
-| `relay update <name> <program> [args...]` | Replace an existing alias |
+| `relay update <name> <program> [args...]` | Replace an existing alias (accepts `--prefix` / `-p`) |
 | `relay list` (alias: `ls`) | List all aliases by name |
 | `relay info <name>` | Show details for one alias |
 | `relay clear` (alias: `cls`) | Remove every alias (asks for confirmation) |
