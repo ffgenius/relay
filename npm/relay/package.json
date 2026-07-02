@@ -1,6 +1,6 @@
 {
   "name": "@ffgenius/relay",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Secure cross-platform command router",
   "license": "MIT",
   "author": "Bin <fuwb0407@gmail.com>",
@@ -28,12 +28,12 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "@ffgenius/relay-win32-x64": "0.2.2",
-    "@ffgenius/relay-win32-arm64": "0.2.2",
-    "@ffgenius/relay-linux-x64": "0.2.2",
-    "@ffgenius/relay-linux-arm64": "0.2.2",
-    "@ffgenius/relay-darwin-x64": "0.2.2",
-    "@ffgenius/relay-darwin-arm64": "0.2.2"
+    "@ffgenius/relay-win32-x64": "0.2.3",
+    "@ffgenius/relay-win32-arm64": "0.2.3",
+    "@ffgenius/relay-linux-x64": "0.2.3",
+    "@ffgenius/relay-linux-arm64": "0.2.3",
+    "@ffgenius/relay-darwin-x64": "0.2.3",
+    "@ffgenius/relay-darwin-arm64": "0.2.3"
   },
   "engines": {
     "node": ">=14"
