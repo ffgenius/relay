@@ -96,12 +96,16 @@ npm 会通过 optionalDependencies 自动下载当前平台的二进制（`linux
 # Prefix 简写 —— `v <任何参数>` 等价于 `vite <任何参数>`
 relay add v vite
 
-# Exact 简写 —— `vd` 永远执行 `vite dev`，不接受任何额外参数
+# Prefix 简写带默认参数 —— `gt <参数>` 等价于 `git clone <参数>`，运行时参数会追加
+relay add gt git -p clone
+
+# Exact 简写 —— `vd` 永远执行 `vite dev`，不接受额外参数
 relay add vd vite dev
 
 # 使用
 v dev                 # → vite dev
 v build               # → vite build
+gt https://xxx/repo.git            # → git clone https://xxx/repo.git
 vd                    # → vite dev
 
 # 查询
@@ -133,16 +137,26 @@ v build    # → vite build
 v --help   # → vite --help
 ```
 
+你也可以通过 `--prefix` / `-p` 注册**带默认参数**的 Prefix 简写。
+默认参数始终包含在内，运行时输入的额外参数会追加到后面：
+
+```bash
+relay add gt git -p clone
+gt https://example.com/repo.git          # → git clone https://example.com/repo.git
+gt --depth 1 https://example.com/repo.git # → git clone --depth 1 https://example.com/repo.git
+```
+
 ### Exact 简写
 
-`relay add <name> <program> <args...>` —— 参数被固化，运行时输入的参数会被忽略。
+`relay add <name> <program> <args...>`（不加 `--prefix`）—— 参数被固化，返回值输入的任何额外参数都会被拒绝。
 
 ```bash
 relay add vd vite dev
 vd         # → vite dev（永远）
+vd preview # → 报错：exact command does not accept extra arguments
 ```
 
-**Prefix** 适合你经常用多个子命令的工具（`v`、`g`、`n`）；**Exact** 适合你天天敲的高频组合（`vd`、`gp`、`nci`）。
+**Prefix** 适合你经常用多个子命令的工具（`v`、`g`、`n`）；**Prefix 带参数** 适合命令本身包含固定子命令但你仍需要传递额外参数（如 `gt` 对应 `git clone`）；**Exact** 适合你天天敲的高频组合（`vd`、`gp`、`nci`）。
 
 ### Snippet（Shell 片段）
 
@@ -171,9 +185,10 @@ relay snippet run goback --dry-run
 | 命令 | 说明 |
 |---|---|
 | `relay init` | 创建 `~/.relay`，写入空 config，并把 `~/.relay/bin` 加入 PATH |
-| `relay add <name> <program> [args...]` | 注册简写（无参数为 prefix，有参数为 exact） |
+| `relay add <name> <program> [args...]` | 注册简写（无参数或带 `-p` 为 prefix，否则为 exact） |
+| `relay add <name> <program> -p [args...]` | 注册带默认参数的 prefix 简写（运行时参数会追加） |
 | `relay remove <name>`（别名 `rm`） | 删除简写 |
-| `relay update <name> <program> [args...]` | 修改已有的简写 |
+| `relay update <name> <program> [args...]` | 修改已有的简写（支持 `--prefix` / `-p`） |
 | `relay list`（别名 `ls`） | 列出所有简写（按名字排序） |
 | `relay info <name>` | 查看单个简写的详情 |
 | `relay clear`（别名 `cls`） | 删除所有简写（会先确认） |

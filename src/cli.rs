@@ -39,7 +39,12 @@ pub enum Command {
         name: String,
         /// The target program (e.g. `vite`).
         program: String,
-        /// Optional fixed arguments — supplying any makes this an `exact` command.
+        /// Force prefix mode — extra args are always appended at runtime,
+        /// even when fixed arguments are supplied.
+        #[arg(long, short)]
+        prefix: bool,
+        /// Optional fixed arguments — supplying any without `--prefix` makes
+        /// this an `exact` command.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -52,6 +57,10 @@ pub enum Command {
     Update {
         name: String,
         program: String,
+        /// Force prefix mode — extra args are always appended at runtime,
+        /// even when fixed arguments are supplied.
+        #[arg(long, short)]
+        prefix: bool,
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -262,14 +271,16 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
         Command::Add {
             name,
             program,
+            prefix,
             args,
-        } => registry::add(&paths, name, program, args)?,
+        } => registry::add(&paths, name, program, args, *prefix)?,
         Command::Remove { name } => registry::remove(&paths, name)?,
         Command::Update {
             name,
             program,
+            prefix,
             args,
-        } => registry::update(&paths, name, program, args)?,
+        } => registry::update(&paths, name, program, args, *prefix)?,
         Command::List => registry::list(&paths)?,
         Command::Info { name } => registry::info(&paths, name)?,
         Command::Discover { program } => discover::run(&paths, program.as_deref())?,

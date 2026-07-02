@@ -75,7 +75,7 @@ fn is_default_root(paths: &Paths) -> bool {
 }
 
 /// `relay add` — register a new command.
-pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<()> {
+pub fn add(paths: &Paths, name: &str, program: &str, args: &[String], prefix: bool) -> Result<()> {
     validate_name(name)?;
     // validate_program returns the normalized form (e.g. `.exe` stripped).
     let program = validate_program(program)?;
@@ -88,7 +88,7 @@ pub fn add(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<
         return Err(RelayError::SnippetNameConflict(name.to_string()));
     }
 
-    let kind = if args.is_empty() {
+    let kind = if prefix || args.is_empty() {
         CommandKind::Prefix
     } else {
         CommandKind::Exact
@@ -156,7 +156,7 @@ pub fn clear(paths: &Paths, auto_yes: bool) -> Result<()> {
 }
 
 /// `relay update` — replace an existing command's program/args.
-pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Result<()> {
+pub fn update(paths: &Paths, name: &str, program: &str, args: &[String], prefix: bool) -> Result<()> {
     let program = validate_program(program)?;
     let mut config = config::load(paths)?;
     let entry = config
@@ -165,7 +165,7 @@ pub fn update(paths: &Paths, name: &str, program: &str, args: &[String]) -> Resu
         .ok_or_else(|| RelayError::UnknownCommand(name.to_string()))?;
     entry.program = program.clone();
     entry.args = args.to_vec();
-    entry.kind = if args.is_empty() {
+    entry.kind = if prefix || args.is_empty() {
         CommandKind::Prefix
     } else {
         CommandKind::Exact
