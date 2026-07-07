@@ -121,6 +121,11 @@ relay discover vite   # aliases grouped by target program
 relay snippet add goback "cd ../"
 relay snippet run goback --dry-run
 
+# Snippets support {{0}} {{1}} … placeholders — pass args at runtime.
+relay snippet add killport --shell powershell "Get-NetTCPConnection -LocalPort {{0}} ^| ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }"
+relay snippet run killport --dry-run 4600
+# → Get-NetTCPConnection -LocalPort 4600 | ...
+
 # Diagnose.
 relay doctor          # check PATH, shims, config
 relay doctor --fix    # auto-repair missing shims and PATH entries
@@ -179,6 +184,17 @@ relay snippet run goback
 # Preview the translated command without executing.
 relay snippet run goback --dry-run
 ```
+
+**Placeholders:** Use `{{0}}` `{{1}}` … in snippet content and pass arguments at runtime:
+
+```bash
+relay snippet add greet --shell powershell "Write-Host Hello {{0}}"
+relay snippet run greet --dry-run World        # → Write-Host Hello World
+relay snippet add killport --shell powershell "Get-NetTCPConnection -LocalPort {{0}} ^| ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }"
+killport 4600                                   # shim forwarding works too
+```
+
+If a placeholder index exceeds the number of arguments provided, relay returns a clear error.
 
 **Why snippets?** Commands like `cd`, `export`, complex pipes, and shell built-ins can't work through relay's direct-execution model. Snippets fill that gap while keeping cross-shell portability.
 
@@ -239,9 +255,9 @@ relay snippet run goback --dry-run
 | `relay snippet edit <name> --content <c>` | Update a snippet's content |
 | `relay snippet edit <name> --desc <d>` | Update description (pass `""` to clear) |
 | `relay snippet edit <name> --shell <d>` | Change the shell dialect |
-| `relay snippet run <name>` | Execute a snippet (auto-translates to current shell) |
-| `relay snippet run <name> --dry-run` | Print the translated command without executing |
-| `relay snippet run <name> --no-translate` | Run as-is, skip cross-shell translation |
+| `relay snippet run <name> [args...]` | Execute a snippet (auto-translates to current shell). `args` replace `{{0}}` `{{1}}` … placeholders |
+| `relay snippet run <name> --dry-run [args...]` | Print the substituted & translated command without executing |
+| `relay snippet run <name> --no-translate [args...]` | Run as-is, skip cross-shell translation (placeholders still apply) |
 | `relay snippet clear` | Remove all snippets (asks for confirmation) |
 | `relay snippet clear --yes` | Same, no confirmation |
 

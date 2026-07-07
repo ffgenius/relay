@@ -195,14 +195,17 @@ pub fn clear(paths: &Paths, auto_yes: bool) -> Result<()> {
 
 // ─── Run (cross-shell execution) ─────────────────────────────────────────
 
-/// `relay snippet run <name>` — execute a snippet, optionally translating
-/// it to the current shell dialect via polysh.
+/// `relay snippet run <name> [args...]` — execute a snippet, optionally
+/// translating it to the current shell dialect via polysh.
+///
+/// Placeholders `{{0}}`, `{{1}}`, … in the snippet content are substituted
+/// with the corresponding positional arguments before execution.
 ///
 /// Pass `target` to override the auto-detected current dialect — useful
 /// for testing cross-shell translation results (e.g. `--target unix`).
 /// Pass `force` to run a best-effort translation even when polysh cannot
 /// fully translate all segments.
-pub fn run(paths: &Paths, name: &str, dry_run: bool, no_translate: bool, target: Option<&str>, force: bool) -> Result<()> {
+pub fn run(paths: &Paths, name: &str, dry_run: bool, no_translate: bool, target: Option<&str>, force: bool, args: &[String]) -> Result<()> {
     let config = config::load(paths)?;
     let snip = config
         .snippets
@@ -215,10 +218,13 @@ pub fn run(paths: &Paths, name: &str, dry_run: bool, no_translate: bool, target:
     };
     let stored_dialect = snip.shell;
 
+    // Substitute {{0}}, {{1}}, … placeholders with positional args.
+    let content = substitute_placeholders(&snip.content, args)?;
+
     let command = if no_translate || current_dialect == stored_dialect {
-        snip.content.clone()
+        content
     } else {
-        translate_content(&snip.content, stored_dialect, current_dialect, force)?
+        translate_content(&content, stored_dialect, current_dialect, force)?
     };
 
     if dry_run {
@@ -250,6 +256,54 @@ fn validate_name(name: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// Substitute `{{0}}`, `{{1}}`, … placeholders in `content` with the
+/// corresponding values from `args`.
+///
+/// Returns the original content unchanged when there are no `{{…}}` markers.
+/// Non-numeric placeholders (e.g. `{{name}}`) are left as-is.  Unclosed `{{`
+/// is also left as-is.  If a numeric placeholder index exceeds `args.len()`
+/// an [`RelayError::MissingPlaceholderArg`] error is returned.
+fn substitute_placeholders(content: &str, args: &[String]) -> Result<String> {
+    // Fast path: no placeholder markers at all.
+    if !content.contains("{{") {
+        return Ok(content.to_string());
+    }
+
+    let mut result = String::with_capacity(content.len());
+    let mut rest = content;
+
+    while let Some(start) = rest.find("{{") {
+        result.push_str(&rest[..start]);
+        rest = &rest[start + 2..];
+
+        if let Some(end) = rest.find("}}") {
+            let idx_str = rest[..end].trim();
+            match idx_str.parse::<usize>() {
+                Ok(idx) => {
+                    if idx >= args.len() {
+                        return Err(RelayError::MissingPlaceholderArg(idx, args.len()));
+                    }
+                    result.push_str(&args[idx]);
+                }
+                Err(_) => {
+                    // Not a number — leave the marker as-is so users can have
+                    // literal `{{name}}` in their snippets when needed.
+                    result.push_str("{{");
+                    result.push_str(&rest[..=end]);
+                }
+            }
+            rest = &rest[end + 2..];
+        } else {
+            // Unclosed `{{` — leave it as-is.
+            result.push_str("{{");
+            result.push_str(rest);
+            rest = "";
+        }
+    }
+    result.push_str(rest);
+    Ok(result)
 }
 
 /// Detect the current shell dialect via polysh.

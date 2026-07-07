@@ -221,6 +221,10 @@ pub enum SnippetAction {
         shell: Option<String>,
     },
     /// Execute a snippet, translating it to the current shell if needed.
+    ///
+    /// Use `{{0}}`, `{{1}}`, … placeholders in the snippet content and pass
+    /// trailing arguments to substitute them at runtime:
+    ///   relay snippet run killport 4000
     Run {
         name: String,
         /// Print the translated command without executing it.
@@ -238,6 +242,10 @@ pub enum SnippetAction {
         /// Overrides auto-detection — useful for testing cross-shell results.
         #[arg(long)]
         target: Option<String>,
+        /// Arguments to substitute for `{{0}}`, `{{1}}`, … placeholders in
+        /// the snippet content.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Remove all snippets.
     Clear {
@@ -330,7 +338,8 @@ fn dispatch_with_root(command: Command, root: Option<std::path::PathBuf>) -> Res
                 no_translate,
                 force,
                 target,
-            } => snippet::run(&paths, name, *dry_run, *no_translate, target.as_deref(), *force)?,
+                args,
+            } => snippet::run(&paths, name, *dry_run, *no_translate, target.as_deref(), *force, args)?,
             SnippetAction::Clear { yes } => snippet::clear(&paths, *yes)?,
         },
     }
