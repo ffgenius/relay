@@ -66,4 +66,7 @@ pub enum RelayError {
 
     #[error("snippet translation failed: {0}")]
     SnippetTranslateError(String),
+
+    #[error("placeholder {{{{ {0} }}}} has no corresponding argument (only {1} arg(s) provided)")]
+    MissingPlaceholderArg(usize, usize),
 }

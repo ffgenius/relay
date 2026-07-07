@@ -117,6 +117,11 @@ relay discover vite   # 按目标程序聚合查看
 relay snippet add goback "cd ../"
 relay snippet run goback --dry-run
 
+# Snippet 支持 {{0}} {{1}} … 占位符，运行时传入参数自动替换
+relay snippet add killport --shell powershell "Get-NetTCPConnection -LocalPort {{0}} ^| ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }"
+relay snippet run killport --dry-run 4600
+# → Get-NetTCPConnection -LocalPort 4600 | ...
+
 # 诊断
 relay doctor          # 检查 PATH / shim / 配置
 relay doctor --fix    # 自动修复缺失的 shim 和 PATH
@@ -173,6 +178,17 @@ relay snippet run goback
 # 预览翻译结果，不实际执行
 relay snippet run goback --dry-run
 ```
+
+**占位符：** Snippet 内容中可用 `{{0}}` `{{1}}` … 占位符，运行时传入的参数会依次替换：
+
+```bash
+relay snippet add greet --shell powershell "Write-Host Hello {{0}}"
+relay snippet run greet --dry-run World        # → Write-Host Hello World
+relay snippet add killport --shell powershell "Get-NetTCPConnection -LocalPort {{0}} ^| ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }"
+killport 4600                                   # 通过 shim 传参同样有效
+```
+
+如果占位符索引超出传入参数数量，relay 会报错并提示缺少哪个参数。
 
 **为什么需要 snippet？** `cd`、`export`、复杂管道、Shell 内置命令等无法通过 relay 的直接执行模型工作。Snippet 填补了这一空白，同时保持跨 Shell 的移植性。
 
@@ -233,9 +249,9 @@ relay snippet run goback --dry-run
 | `relay snippet edit <name> --content <c>` | 修改内容 |
 | `relay snippet edit <name> --desc <d>` | 修改描述（传 `""` 清除） |
 | `relay snippet edit <name> --shell <d>` | 修改 Shell 方言 |
-| `relay snippet run <name>` | 执行 snippet（自动翻译到当前 Shell） |
-| `relay snippet run <name> --dry-run` | 只打印翻译后的命令，不执行 |
-| `relay snippet run <name> --no-translate` | 跳过翻译，原样执行 |
+| `relay snippet run <name> [args...]` | 执行 snippet（自动翻译到当前 Shell）。`args` 按序替换 `{{0}}` `{{1}}` … 占位符 |
+| `relay snippet run <name> --dry-run [args...]` | 只打印替换和翻译后的命令，不执行 |
+| `relay snippet run <name> --no-translate [args...]` | 跳过翻译，原样执行（仍支持占位符替换） |
 | `relay snippet clear` | 删除所有 snippets（会先确认） |
 | `relay snippet clear --yes` | 同上，但不确认 |
 
