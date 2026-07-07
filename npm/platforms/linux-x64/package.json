@@ -1,6 +1,6 @@
 {
   "name": "@ffgenius/relay-linux-x64",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "linux-x64 binary for @ffgenius/relay",
   "license": "MIT",
   "repository": {
